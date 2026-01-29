@@ -1,0 +1,6 @@
+_______________
+generation # 101:
+---------------
+starting at:2026-01-12 21:50:27.015063
+number of finches in current population:200
+number of falcons in current population:1

@@ -1,0 +1,18 @@
+#!/bin/bash
+
+#SBATCH -e GBDT1.err 
+#SBATCH -o GBDT1.log
+#SBATCH -J GBDT1
+
+#SBATCH --ntasks-per-node=28
+#SBATCH --nodes=1
+#SBATCH --time=300:00:00
+
+
+
+
+###
+
+module load gcc-8.2.0-gcc-4.9.4-buno4pb 
+ ./simple_GBDT.py protonated+deprotonated 
+

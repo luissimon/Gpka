@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#SBATCH -e GBDT.err 
+#SBATCH -o GBDT.log
+#SBATCH -J GBDT
+
+#SBATCH --ntasks-per-node=2
+#SBATCH --nodes=1
+#SBATCH --time=300:00:00
+#SBATCH --constraint="atwood" 
+
+
+
+
+###
+
+module load gcc-8.2.0-gcc-4.9.4-buno4pb 
+ ./GBDT-finch.py population 200
+

@@ -11,7 +11,10 @@ extracted_data/*.json
 extracted_data/*.xz
 sampl/extracted_data/*.json
 #sampl/extracted_data/*.xz
-#ignore models
-models/
 #ignore old scripts
 scripts/old
+#ignore large files
+models/*/values_extracted-gibbs-swb97xd.25_all_with_graph_data.csv
+models/NN-simple-stdscaler/values_extracted-gibbs-swb97xd.25_std_train.dataset
+models/NN-simple-stdscaler/pka_predictor_config.json
+#

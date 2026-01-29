@@ -1,0 +1,6 @@
+_______________
+generation # 104:
+---------------
+starting at:2025-12-03 17:18:13.587653
+number of finches in current population:200
+number of falcons in current population:1
