@@ -1,7 +1,7 @@
 # Ignore output_files  directory
-output_files/
+output_files/*optimized
 #ignore sampl/output_files directory
-sampl/output_files/
+sampl/output_files/*optimized
 #ignore not_icluded directory
 not_included
 #ignore NN-simple-stdscaler
