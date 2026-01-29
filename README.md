@@ -1,6 +1,7 @@
 # Gpka
 
-scripts and data for the file in: https://doi.org/10.26434/chemrxiv-2025-sllx4/v2
+scripts and data for the manuscript entitled: pKa predicting models trained with a tautomer compatible
+graph dataset with quantum chemical features.
 
 Data is also available in: https://orwell.usal.es/Gpka including files that are too large to be included in github:
 
