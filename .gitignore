@@ -6,9 +6,11 @@ sampl/output_files/
 not_included
 #ignore NN-simple-stdscaler
 NN-simple_stdscaler
-#ignore extracted data
-extracted_data
-sampl/extracted_data
+#ignore extracted data json and zip  files
+extracted_data/*.json
+extracted_data/*.xz
+sampl/extracted_data/*.json
+#sampl/extracted_data/*.xz
 #ignore models
 models/
 #ignore old scripts
