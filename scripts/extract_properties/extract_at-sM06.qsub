@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#SBATCH -t 99:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=14
+
+#SBATCH --job-name=extract_at_sM06
+#SBATCH --output=extract_at_sM06.qlog
+#SBATCH --error=extract_at_sM06.err
+
+
+./extract_atom_features.py  -out 25 -lot sM06 -weighting gibbs 
+
+

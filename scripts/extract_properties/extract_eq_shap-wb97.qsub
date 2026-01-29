@@ -1,0 +1,15 @@
+#!/bin/bash
+
+#SBATCH -t 99:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=14
+
+#SBATCH --job-name=extract_eq_swb97
+#SBATCH --output=extract_eq_swb97.qlog
+#SBATCH --error=extract_eq_swb97.err
+
+#SBATCH --constraint="orwell" 
+
+./ac_base-eq.py   -lot wb97xd -weighting gibbs -sampl 
+
+

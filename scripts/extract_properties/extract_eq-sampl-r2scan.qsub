@@ -1,0 +1,15 @@
+#!/bin/bash
+
+#SBATCH -t 99:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=7
+
+#SBATCH --job-name=extract_eq_wb97
+#SBATCH --output=extract_eq_wb97.qlog
+#SBATCH --error=extract_eq_wb97.err
+
+#SBATCH --constraint="asimov" 
+
+./ac_base-eq.py -opt_lot b973c  -lot r2scan3c -weighting gibbs -orca_version 6 -sampl -out 6000 6000: -exclude mesulfonic1oh12pyridyl_an->2an,mesulfonic1oh13pyridyl_an->2an,mesulfonic1oh14pyridyl_an->2an
+
+

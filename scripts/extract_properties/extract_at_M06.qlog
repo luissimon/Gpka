@@ -1,0 +1,161 @@
+                     pKa  ...                       inchiKey
+compn                     ...                               
+sm6-1_neut->an      9.53  ...   AACFPJSJOWQNBN-UHFFFAOYSA-NÊ
+sm6-2_cation->neut  5.03  ...  VCOMYMMMFREKQC-UHFFFAOYSA-NÊÊ
+sm6-3_cation->neut  7.02  ...   IGBVONNIYTWQQL-UHFFFAOYSA-NÊ
+sm6-4_cation->neut  6.02  ...  BTRLSAYDVSPYCS-UHFFFAOYSA-NÊÊ
+sm6-5_cation->neut  4.59  ...  VZFMTNFVLVJCCC-UHFFFAOYSA-NÊÊ
+
+[5 rows x 5 columns]
+                                                                                
+1/76  loading 2 protonated molecules and 1deprotonated molecules for:sm6-1_neut->an                                            
+                                                                                
+2/76  loading 4 protonated molecules and 2deprotonated molecules for:sm6-2_cation->neut                                            
+                                                                                
+3/76  loading 13 protonated molecules and 6deprotonated molecules for:sm6-3_cation->neut                                            
+                                                                                
+4/76  loading 2 protonated molecules and 1deprotonated molecules for:sm6-4_cation->neut                                            
+                                                                                
+5/76  loading 1 protonated molecules and 1deprotonated molecules for:sm6-5_cation->neut                                            
+                                                                                
+6/76  loading 4 protonated molecules and 2deprotonated molecules for:sm6-6_cation->neut                                            
+                                                                                
+7/76  loading 2 protonated molecules and 2deprotonated molecules for:sm6-6_neut->an                                            
+                                                                                
+8/76  loading 4 protonated molecules and 2deprotonated molecules for:sm6-7_cation->neut                                            
+                                                                                
+9/76  loading 3 protonated molecules and 1deprotonated molecules for:sm6-8_neut->an                                            
+                                                                                
+10/76  loading 8 protonated molecules and 4deprotonated molecules for:sm6-9_cation->neut                                            
+                                                                                
+11/76  loading 6 protonated molecules and 8deprotonated molecules for:sm6-10_cation->neut                                            
+                                                                                
+12/76  loading 2 protonated molecules and 1deprotonated molecules for:sm6-11_cation->neut                                            
+                                                                                
+13/76  loading 4 protonated molecules and 2deprotonated molecules for:sm6-12_cation->neut                                            
+                                                                                
+14/76  loading 7 protonated molecules and 3deprotonated molecules for:sm6-13_cation->neut                                            
+                                                                                
+15/76  loading 1 protonated molecules and 2deprotonated molecules for:sm6-14_2cation->cation                                            
+                                                                                
+16/76  loading 2 protonated molecules and 1deprotonated molecules for:sm6-14_cation->neut                                            
+                                                                                
+17/76  loading 2 protonated molecules and 2deprotonated molecules for:sm6-15_cation->neut                                            
+                                                                                
+18/76  loading 2 protonated molecules and 1deprotonated molecules for:sm6-15_neut->an                                            
+                                                                                
+19/76  loading 1 protonated molecules and 1deprotonated molecules for:sm6-16_cation->neut                                            
+                                                                                
+20/76  loading 1 protonated molecules and 1deprotonated molecules for:sm6-16_neut->an                                            
+                                                                                
+21/76  loading 4 protonated molecules and 3deprotonated molecules for:sm6-17_cation->neut                                            
+                                                                                
+22/76  loading 45 protonated molecules and 35deprotonated molecules for:sm6-18_cation->neut                                            
+                                                                                
+23/76  loading 35 protonated molecules and 56deprotonated molecules for:sm6-18_neut->an                                            
+                                                                                
+24/76  loading 56 protonated molecules and 23deprotonated molecules for:sm6-18_an->2an                                            
+                                                                                
+25/76  loading 13 protonated molecules and 11deprotonated molecules for:sm6-19me_cation->neut                                            
+                                                                                
+26/76  loading 8 protonated molecules and 8deprotonated molecules for:sm6-20_neut->an                                            
+                                                                                
+27/76  loading 16 protonated molecules and 16deprotonated molecules for:sm6-21_cation->neut                                            
+                                                                                
+28/76  loading 1 protonated molecules and 2deprotonated molecules for:sm6-22_cation->neut                                            
+                                                                                
+29/76  loading 2 protonated molecules and 1deprotonated molecules for:sm6-22_neut->an                                            
+                                                                                
+30/76  loading 16 protonated molecules and 16deprotonated molecules for:sm6-23me_cation->neut                                            
+                                                                                
+31/76  loading 29 protonated molecules and 18deprotonated molecules for:sm6-24_cation->neut                                            
+                                                                                
+32/76  loading 6 protonated molecules and 6deprotonated molecules for:sm7-25_neut->an                                            
+                                                                                
+33/76  loading 7 protonated molecules and 7deprotonated molecules for:sm7-26_neut->an                                            
+                                                                                
+34/76  loading 15 protonated molecules and 16deprotonated molecules for:sm7-27_neut->an                                            
+                                                                                
+35/76  loading 5 protonated molecules and 4deprotonated molecules for:sm7-29_neut->an                                            
+                                                                                
+36/76  loading 8 protonated molecules and 8deprotonated molecules for:sm7-30_neut->an                                            
+                                                                                
+37/76  loading 6 protonated molecules and 6deprotonated molecules for:sm7-31_neut->an                                            
+                                                                                
+38/76  loading 5 protonated molecules and 5deprotonated molecules for:sm7-32_neut->an                                            
+                                                                                
+39/76  loading 6 protonated molecules and 6deprotonated molecules for:sm7-34_neut->an                                            
+                                                                                
+40/76  loading 10 protonated molecules and 8deprotonated molecules for:sm7-35_neut->an                                            
+                                                                                
+41/76  loading 12 protonated molecules and 11deprotonated molecules for:sm7-36_neut->an                                            
+                                                                                
+42/76  loading 11 protonated molecules and 12deprotonated molecules for:sm7-37_neut->an                                            
+                                                                                
+43/76  loading 5 protonated molecules and 5deprotonated molecules for:sm7-38_neut->an                                            
+                                                                                
+44/76  loading 6 protonated molecules and 6deprotonated molecules for:sm7-39_neut->an                                            
+                                                                                
+45/76  loading 6 protonated molecules and 6deprotonated molecules for:sm7-40_neut->an                                            
+                                                                                
+46/76  loading 4 protonated molecules and 4deprotonated molecules for:sm7-41_neut->an                                            
+                                                                                
+47/76  loading 4 protonated molecules and 4deprotonated molecules for:sm7-42_neut->an                                            
+                                                                                
+48/76  loading 4 protonated molecules and 4deprotonated molecules for:sm7-43_neut->an                                            
+                                                                                
+49/76  loading 4 protonated molecules and 4deprotonated molecules for:sm7-44_neut->an                                            
+                                                                                
+50/76  loading 4 protonated molecules and 4deprotonated molecules for:sm7-45_neut->an                                            
+                                                                                
+51/76  loading 4 protonated molecules and 4deprotonated molecules for:sm7-46_neut->an                                            
+                                                                                
+52/76  loading 14 protonated molecules and 6deprotonated molecules for:sm8-1_cation->neut                                            
+                                                                                
+53/76  loading 6 protonated molecules and 2deprotonated molecules for:sm8-1_neut->an                                            
+                                                                                
+54/76  loading 36 protonated molecules and 13deprotonated molecules for:sm8-2_neut->an                                            
+                                                                                
+55/76  loading 5 protonated molecules and 2deprotonated molecules for:sm8-3_neut->an                                            
+                                                                                
+56/76  loading 12 protonated molecules and 4deprotonated molecules for:sm8-4_neut->an                                            
+                                                                                
+57/76  loading 2 protonated molecules and 1deprotonated molecules for:sm8-5_neut->an                                            
+                                                                                
+58/76  loading 8 protonated molecules and 4deprotonated molecules for:sm8-6_neut->an                                            
+                                                                                
+59/76  loading 9 protonated molecules and 10deprotonated molecules for:sm8-7_cation->neut                                            
+                                                                                
+60/76  loading 2 protonated molecules and 2deprotonated molecules for:sm8-8_cation->neut                                            
+                                                                                
+61/76  loading 9 protonated molecules and 9deprotonated molecules for:sm8-9_cation->neut                                            
+                                                                                
+62/76  loading 20 protonated molecules and 40deprotonated molecules for:sm8-10_cation->neut                                            
+                                                                                
+63/76  loading 2 protonated molecules and 1deprotonated molecules for:sm8-12_cation->neut                                            
+                                                                                
+64/76  loading 8 protonated molecules and 4deprotonated molecules for:sm8-14_cation->neut                                            
+                                                                                
+65/76  loading 4 protonated molecules and 2deprotonated molecules for:sm8-15_cation->neut                                            
+                                                                                
+66/76  loading 2 protonated molecules and 3deprotonated molecules for:sm8-16_cation->neut                                            
+                                                                                
+67/76  loading 26 protonated molecules and 27deprotonated molecules for:sm8-17_cation->neut                                            
+                                                                                
+68/76  loading 2 protonated molecules and 1deprotonated molecules for:sm8-18_cation->neut                                            
+                                                                                
+69/76  loading 11 protonated molecules and 15deprotonated molecules for:sm8-19_cation->neut                                            
+                                                                                
+70/76  loading 15 protonated molecules and 8deprotonated molecules for:sm8-19_neut->an                                            
+                                                                                
+71/76  loading 4 protonated molecules and 2deprotonated molecules for:sm8-20_cation->neut                                            
+                                                                                
+72/76  loading 9 protonated molecules and 8deprotonated molecules for:sm8-21_neut->an                                            
+                                                                                
+73/76  loading 10 protonated molecules and 9deprotonated molecules for:sm8-21_cation->neut                                            
+                                                                                
+74/76  loading 5 protonated molecules and 3deprotonated molecules for:sm8-22_cation->neut                                            
+                                                                                
+75/76  loading 2 protonated molecules and 2deprotonated molecules for:sm8-23_cation->neut                                            
+                                                                                
+76/76  loading 2 protonated molecules and 1deprotonated molecules for:sm8-23_neut->an                                            

@@ -1,0 +1,9 @@
+2026-01-20 13:27:40.290761: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-01-20 13:27:42.640233: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+Traceback (most recent call last):
+  File "./extract_atom_features.py", line 1216, in <module>
+    dmp,_=get_lists_of_properties_for_symmetry_reduced_graph(deprotonated_molecules_HL,deprotonated_molecules,deprotonated_HL_molecules_file_names,protonated_molecules_HL[0])
+  File "./extract_atom_features.py", line 974, in get_lists_of_properties_for_symmetry_reduced_graph
+    map=dict(sorted(map.items()))
+AttributeError: 'NoneType' object has no attribute 'items'

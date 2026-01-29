@@ -1,0 +1,14 @@
+#!/bin/bash
+
+#SBATCH -t 99:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=14
+
+#SBATCH --job-name=extract_eq_sm06
+#SBATCH --output=extract_eq_sm06.qlog
+#SBATCH --error=extract_eq_sm06.err
+
+
+./ac_base-eq.py   -lot sM06 -weighting gibbs -sampl 
+
+

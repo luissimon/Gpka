@@ -1,0 +1,15 @@
+# Ignore output_files  directory
+output_files/
+#ignore sampl/output_files directory
+sampl/output_files/
+#ignore not_icluded directory
+not_included
+#ignore NN-simple-stdscaler
+NN-simple_stdscaler
+#ignore extracted data
+extracted_data
+sampl/extracted_data
+#ignore models
+models/
+#ignore old scripts
+scripts/old

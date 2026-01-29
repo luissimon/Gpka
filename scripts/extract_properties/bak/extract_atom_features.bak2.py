@@ -1,0 +1,1627 @@
+#! /usr/bin/env python3.8
+# -*- coding: utf-8 -*-
+# script for extracting atomic properties 
+
+import string
+import os
+import os.path
+import sys
+import copy
+import Molecular_structure
+import numpy as np
+import pandas as pd
+import json
+import networkx as nx
+import spektral
+
+import repeated_molecules
+
+import json
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+        if isinstance(obj, (np.floating, np.complexfloating)):
+            return float(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, np.string_) or isinstance(obj,np.str_):
+            return str(obj)
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, timedelta):
+            return str(obj)
+        return super(NpEncoder, self).default(obj)
+
+np.set_printoptions(precision=4,suppress=True,sign=" ") #borrame
+
+#the text in the file names for HL output files:
+# CHANGE THIS FOR DIFFERENT LEVELS OF THEORY!!!! 
+
+if "-weighting" in sys.argv:  weighting=sys.argv[sys.argv.index("-weighting")+1]
+else: weighting="gibbs" # "gibbs", "sp", or "zero"
+if "-lot" in sys.argv:  level_of_theory=sys.argv[sys.argv.index("-lot")+1]
+else: level_of_theory="sM06" # "M06","sM06","swb97xd","wb97xd","pbeh3c"
+
+if weighting not in ["gibbs","sp","zero"]: print ("weighting should be gibbs, sp, or zero"); sys.exit()
+if level_of_theory not in ["M06","sM06","swb97xd","wb97xd","pbeh3c"]: print ("lot must be M06, sM06, swb97xd, wb97xd, or pbeh3c"); sys.exit()
+
+if level_of_theory=="wb97xd": HL_text="_wb97xd_chrg"
+elif level_of_theory=="swb97xd": HL_text="_swb97xd_chrg"
+elif level_of_theory=="sM06": HL_text="_sm06_chrg"
+elif level_of_theory=="M06": HL_text="_m06_chrg"
+elif level_of_theory=="pbeh3c": HL_text="_pbeh3c_chrg"
+
+#the csv file where results will be deposited:
+#the csv file where results will be deposited:
+if "-out" in sys.argv: output_suffix=sys.argv[sys.argv.index("-out")+1]   
+else: output_suffix="22"
+graphs_extracted_file="molecular_graphs-"+weighting+"-"+level_of_theory+"."+output_suffix+".json"
+already_done=[]
+print (graphs_extracted_file)#borrame
+if graphs_extracted_file in os.listdir(): 
+    print ("file for output exist; (c)ontinue or (o)verwrite?")
+    #cont=input()
+    cont="n"
+    if cont=="c" or cont=="C":
+        with open (graphs_extracted_file,"r") as f: lines=f.readlines()
+        for l in lines[1:]: already_done.append(json.loads(l)["name"])
+        write_keys_list=False
+    else: os.system("rm -f "+graphs_extracted_file)
+
+hartrees_to_kal_mol=627.5095
+RT=0.594  # cal/kmol(298 K)
+
+root_route="/Users/luissimon/Documents/proyecto2017/pka/" # in mac
+root_route="/home/lsimon/jobs/pka/" #in server
+routes=[root_route+"/output_files/optmization/"]
+HL_route=root_route+"/output_files/SP-"+level_of_theory+"/"
+nbo_route=root_route+"output_files/nbo/"+level_of_theory+"/"
+
+labels_route="/Users/luissimon/Documents/proyecto2017/pka/" # in mac
+labels_route="/home/lsimon/jobs/pka/" #in server
+labels=pd.read_csv(labels_route+"labels-all-inchy9.csv",encoding='unicode_escape')
+labels.set_index("compn",inplace=True)
+#labels.drop(['alternative pka','alternative ref.','is Lange?'],axis=1,inplace=True)
+#labels.drop(['is Lange?'],axis=1,inplace=True)
+labels.dropna(how='all', axis=1, inplace=True)
+print (labels.head())
+number_of_errors=0
+
+#list of features that are not assigned to each atom (although they are a list)
+not_atomic_properties=["FASA_mol_electronic_spatial_extent_components","FASA_molecular_dipole_moment","FASA_mol_electronic_spatial_extent_components"]
+
+
+#dictionaries to transform the names of descriptors in this script to the names used in publication
+#translating them consumes some time but also allows to change the name of the descriptors without further changes in the code
+#fomat: script name is key, publication name is value
+
+atom_features_publication_names={
+        "number_of_H_difference": "number_of_H_difference",
+        "chg_hirshfeld_protonated": "protonated Hirshfeld",
+        "chg_hirshfeld_deprotonated": "deprotonated Hirshfeld",
+        "chg_hirshfeld_difference": "Hirshfeld",
+        "chg_voronoy_protonated": "protonated Voronoy",
+        "chg_voronoy_deprotonated": "deprotonated Voronoy",
+        "chg_voronoy_difference": "Voronoy",
+        "chg_mulliken_protonated": "protonated Mulliken",
+        "chg_mulliken_deprotonated": "deprotonated Mulliken",
+        "chg_mulliken_difference": "Mulliken",
+        "chg_lowdin_protonated": "protonated Lowdin",
+        "chg_lowdin_deprotonated": "deprotonated Lowdin",
+        "chg_lowdin_difference": "Lowdin",
+        "chg_becke_protonated": "protonated Becke",
+        "chg_becke_deprotonated": "deprotonated Becke",
+        "chg_becke_difference": "Becke",
+        "chg_ADCH_protonated": "protonated ADCH",
+        "chg_ADCH_deprotonated": "deprotonated ADCH",
+        "chg_ADCH_difference": "ADCH",
+        "chg_CHELPG_protonated": "protonated CHELPG",
+        "chg_CHELPG_deprotonated": "deprotonated CHELPG",
+        "chg_CHELPG_difference": "CHELPG",
+        "chg_MK_protonated": "protonated MK",
+        "chg_MK_deprotonated": "deprotonated MK",
+        "chg_MK_difference": "MK",
+        "chg_CM5_protonated": "protonated CM5",
+        "chg_CM5_deprotonated": "deprotonated CM5",
+        "chg_CM5_difference": "CM5",
+        "chg_12CM5_protonated": "protonated 12CM5",
+        "chg_12CM5_deprotonated": "deprotonated 12CM5",
+        "chg_12CM5_difference": "12CM5",
+        "chg_RESP_protonated": "protonated RESP",
+        "chg_RESP_deprotonated": "deprotonated RESP",
+        "chg_RESP_difference": "RESP",
+        "chg_PEOE_protonated": "protonated PEOE",
+        "chg_PEOE_deprotonated": "deprotonated PEOE",
+        "chg_PEOE_difference": "PEOE",
+        "qams_atom_overall_surf_area_protonated": "protonated (a)Surf",
+        "qams_atom_overall_surf_area_deprotonated": "deprotonated (a)Surf",
+        "qams_atom_overall_surf_area_difference": "(a)Surf",
+        "qams_atom_pos_surf_area_protonated": "protonated (a)Surf+",
+        "qams_atom_pos_surf_area_deprotonated": "deprotonated (a)Surf+",
+        "qams_atom_pos_surf_area_difference": "(a)Surf+",
+        "qams_atom_neg_surf_area_protonated": "protonated (a)Surf-",
+        "qams_atom_neg_surf_area_deprotonated": "deprotonated (a)Surf-",
+        "qams_atom_neg_surf_area_difference": "(a)Surf-",
+        "qams_atom_min_val_protonated": "protonated (a)min-ESP",
+        "qams_atom_min_val_deprotonated": "deprotonated (a)min-ESP",
+        "qams_atom_min_val_difference": "(a)min-ESP",
+        "qams_atom_max_val_protonated": "protonated (a)max-ESP",
+        "qams_atom_max_val_deprotonated": "deprotonated (a)max-ESP",
+        "qams_atom_max_val_difference": "(a)max-ESP",
+        "qams_atom_overall_avg_protonated": "protonated (a)avg-ESP",
+        "qams_atom_overall_avg_deprotonated": "deprotonated (a)avg-ESP",
+        "qams_atom_overall_avg_difference": "(a)avg-ESP",
+        "qams_atom_pos_avg_protonated": "protonated (a)avg-ESP+",
+        "qams_atom_pos_avg_deprotonated": "deprotonated (a)avg-ESP+",
+        "qams_atom_pos_avg_difference": "(a)avg-ESP+",
+        "qams_atom_neg_avg_protonated": "protonated (a)avg-ESP-",
+        "qams_atom_neg_avg_deprotonated": "deprotonated (a)avg-ESP-",
+        "qams_atom_neg_avg_difference": "(a)avg-ESP-",
+        "qams_atom_overall_variance_protonated": "protonated (a)var-ESP",
+        "qams_atom_overall_variance_deprotonated": "deprotonated (a)var-ESP",
+        "qams_atom_overall_variance_difference": "(a)var-ESP",
+        "qams_atom_pos_variance_protonated": "protonated (a)var-ESP+",
+        "qams_atom_pos_variance_deprotonated": "deprotonated (a)var-ESP+",
+        "qams_atom_pos_variance_difference": "(a)var-ESP+",
+        "qams_atom_neg_variance_protonated": "protonated (a)var-ESP-",
+        "qams_atom_neg_variance_deprotonated": "deprotonated (a)var-ESP-",
+        "qams_atom_neg_variance_difference": "(a)var-ESP-",
+        "qams_atom_Pi_protonated": "protonated (a)*PI-ESP",
+        "qams_atom_Pi_deprotonated": "deprotonated (a)*PI-ESP",
+        "qams_atom_Pi_difference": "(a)*PI-ESP",
+        "FASA_mod_atomic_dipole_moments_protonated": "protonated (a)*mu",
+        "FASA_mod_atomic_dipole_moments_deprotonated": "deprotonated (a)*mu",
+        "FASA_mod_atomic_dipole_moments_difference": "(a)*mu",
+        "FASA_mod_atomic_dipole_moments_contributions_protonated": "protonated (a)*mu-ctb",
+        "FASA_mod_atomic_dipole_moments_contributions_deprotonated": "deprotonated (a)*mu-ctb",
+        "FASA_mod_atomic_dipole_moments_contributions_difference": "(a)*mu-ctb",
+        "FASA_Atomic_electronic_spatial_extent_<r^2>_protonated": "protonated (a)tr-e*theta",
+        "FASA_Atomic_electronic_spatial_extent_<r^2>_deprotonated": "deprotonated (a)tr-e*theta",
+        "FASA_Atomic_electronic_spatial_extent_<r^2>_difference": "(a)tr-e*theta",
+        "v_at_nucleus_protonated": "protonated ESP-nucl",
+        "v_at_nucleus_deprotonated": "deprotonated ESP-nucl",
+        "v_at_nucleus_difference": "ESP-nucl",
+        "alie_atom_overall_avg_protonated": "protonated (a)avg-ALIE",
+        "alie_atom_overall_avg_deprotonated": "deprotonated (a)avg-ALIE",
+        "alie_atom_overall_avg_difference": "(a)avg-ALIE",
+        "alie_atom_overall_variance_protonated": "protonated (a)var-ALIE",
+        "alie_atom_overall_variance_deprotonated": "deprotonated (a)var-ALIE",
+        "alie_atom_overall_variance_difference": "(a)var-ALIE",
+        "alie_atom_max_val_protonated": "protonated (a)max-ALIE",
+        "alie_atom_max_val_deprotonated": "deprotonated (a)max-ALIE",
+        "alie_atom_max_val_difference": "(a)max-ALIE",
+        "alie_atom_min_val_protonated": "protonated (a)min-ALIE",
+        "alie_atom_min_val_deprotonated": "deprotonated (a)min-ALIE",
+        "alie_atom_min_val_difference": "(a)min-ALIE",
+        "lea_atom_min_val_protonated": "protonated (a)min-LEA",
+        "lea_atom_min_val_deprotonated": "deprotonated (a)min-LEA",
+        "lea_atom_min_val_difference": "(a)min-LEA",
+        "lea_atom_max_val_protonated": "protonated (a)max-LEA",
+        "lea_atom_max_val_deprotonated": "deprotonated (a)max-LEA",
+        "lea_atom_max_val_difference": "(a)max-LEA",
+        "lea_atom_overall_avg_protonated": "protonated (a)avg-LEA",
+        "lea_atom_overall_avg_deprotonated": "deprotonated (a)avg-LEA",
+        "lea_atom_overall_avg_difference": "(a)avg-LEA",
+        "lea_atom_neg_variance_protonated": "protonated (a)var-LEA",
+        "lea_atom_neg_variance_deprotonated": "deprotonated (a)var-LEA",
+        "lea_atom_neg_variance_difference": "(a)var-LEA",
+        "nbo_charges_protonated": "protonated NBO-chg",
+        "nbo_charges_deprotonated": "deprotonated NBO-chg",
+        "nbo_charges_difference": "NBO-chg",
+        "chemical_isotropic_shield_protonated": "protonated NMR*delta",
+        "chemical_isotropic_shield_deprotonated": "deprotonated NMR*delta",
+        "chemical_isotropic_shield_difference": "NMR*delta",
+        "chg_hirshfeld_H_protonated": "protonated Hirshfeld-*H",
+        "chg_hirshfeld_H_deprotonated": "deprotonated Hirshfeld-*H",
+        "chg_hirshfeld_H_difference": "Hirshfeld-*H",
+        "chg_voronoy_H_protonated": "protonated Voronoy-*H",
+        "chg_voronoy_H_deprotonated": "deprotonated Voronoy-*H",
+        "chg_voronoy_H_difference": "Voronoy-*H",
+        "chg_mulliken_H_protonated": "protonated Mulliken-*H",
+        "chg_mulliken_H_deprotonated": "deprotonated Mulliken-*H",
+        "chg_mulliken_H_difference": "Mulliken-*H",
+        "chg_lowdin_H_protonated": "protonated Lowdin-*H",
+        "chg_lowdin_H_deprotonated": "deprotonated Lowdin-*H",
+        "chg_lowdin_H_difference": "Lowdin-*H",
+        "chg_becke_H_protonated": "protonated Becke-*H",
+        "chg_becke_H_deprotonated": "deprotonated Becke-*H",
+        "chg_becke_H_difference": "Becke-*H",
+        "chg_ADCH_H_protonated": "protonated ADCH-*H",
+        "chg_ADCH_H_deprotonated": "deprotonated ADCH-*H",
+        "chg_ADCH_H_difference": "ADCH-*H",
+        "chg_CHELPG_H_protonated": "protonated CHELPG-*H",
+        "chg_CHELPG_H_deprotonated": "deprotonated CHELPG-*H",
+        "chg_CHELPG_H_difference": "CHELPG-*H",
+        "chg_MK_H_protonated": "protonated MK-*H",
+        "chg_MK_H_deprotonated": "deprotonated MK-*H",
+        "chg_MK_H_difference": "MK-*H",
+        "chg_CM5_H_protonated": "protonated CM5-*H",
+        "chg_CM5_H_deprotonated": "deprotonated CM5-*H",
+        "chg_CM5_H_difference": "CM5-*H",
+        "chg_12CM5_H_protonated": "protonated 12CM5-*H",
+        "chg_12CM5_H_deprotonated": "deprotonated 12CM5-*H",
+        "chg_12CM5_H_difference": "12CM5-*H",
+        "chg_RESP_H_protonated": "protonated RESP-*H",
+        "chg_RESP_H_deprotonated": "deprotonated RESP-*H",
+        "chg_RESP_H_difference": "RESP-*H",
+        "chg_PEOE_H_protonated": "protonated PEOE-*H",
+        "chg_PEOE_H_deprotonated": "deprotonated PEOE-*H",
+        "chg_PEOE_H_difference": "PEOE-*H",
+        "qams_atom_overall_surf_area_H_protonated": "protonated (a)Surf-*H",
+        "qams_atom_overall_surf_area_H_deprotonated": "deprotonated (a)Surf-*H",
+        "qams_atom_overall_surf_area_H_difference": "(a)Surf-*H",
+        "qams_atom_pos_surf_area_H_protonated": "protonated (a)Surf-*H+",
+        "qams_atom_pos_surf_area_H_deprotonated": "deprotonated (a)Surf-*H+",
+        "qams_atom_pos_surf_area_H_difference": "(a)Surf-*H+",
+        "qams_atom_neg_surf_area_H_protonated": "protonated (a)Surf-*H-",
+        "qams_atom_neg_surf_area_H_deprotonated": "deprotonated (a)Surf-*H-",
+        "qams_atom_neg_surf_area_H_difference": "(a)Surf-*H-",
+        "qams_atom_min_val_H_protonated": "protonated (a)min-ESP-*H",
+        "qams_atom_min_val_H_deprotonated": "deprotonated (a)min-ESP-*H",
+        "qams_atom_min_val_H_difference": "(a)min-ESP-*H",
+        "qams_atom_max_val_H_protonated": "protonated (a)max-ESP-*H",
+        "qams_atom_max_val_H_deprotonated": "deprotonated (a)max-ESP-*H",
+        "qams_atom_max_val_H_difference": "(a)max-ESP-*H",
+        "qams_atom_overall_avg_H_protonated": "protonated (a)avg-ESP-*H",
+        "qams_atom_overall_avg_H_deprotonated": "deprotonated (a)avg-ESP-*H",
+        "qams_atom_overall_avg_H_difference": "(a)avg-ESP-*H",
+        "qams_atom_pos_avg_H_protonated": "protonated (a)avg-ESP-*H+",
+        "qams_atom_pos_avg_H_deprotonated": "deprotonated (a)avg-ESP-*H+",
+        "qams_atom_pos_avg_H_difference": "(a)avg-ESP-*H+",
+        "qams_atom_neg_avg_H_protonated": "protonated (a)avg-ESP-*H-",
+        "qams_atom_neg_avg_H_deprotonated": "deprotonated (a)avg-ESP-*H-",
+        "qams_atom_neg_avg_H_difference": "(a)avg-ESP-*H-",
+        "qams_atom_overall_variance_H_protonated": "protonated (a)var-ESP-*H",
+        "qams_atom_overall_variance_H_deprotonated": "deprotonated (a)var-ESP-*H",
+        "qams_atom_overall_variance_H_difference": "(a)var-ESP-*H",
+        "qams_atom_pos_variance_H_protonated": "protonated (a)var-ESP-*H+",
+        "qams_atom_pos_variance_H_deprotonated": "deprotonated (a)var-ESP-*H+",
+        "qams_atom_pos_variance_H_difference": "(a)var-ESP-*H+",
+        "qams_atom_neg_variance_H_protonated": "protonated (a)var-ESP-*H-",
+        "qams_atom_neg_variance_H_deprotonated": "deprotonated (a)var-ESP-*H-",
+        "qams_atom_neg_variance_H_difference": "(a)var-ESP-*H-",
+        "qams_atom_Pi_H_protonated": "protonated (a)*PI-ESP-*H",
+        "qams_atom_Pi_H_deprotonated": "deprotonated (a)*PI-ESP-*H",
+        "qams_atom_Pi_H_difference": "(a)*PI-ESP-*H",
+        "FASA_mod_atomic_dipole_moments_H_protonated": "protonated (a)*mu-*H",
+        "FASA_mod_atomic_dipole_moments_H_deprotonated": "deprotonated (a)*mu-*H",
+        "FASA_mod_atomic_dipole_moments_H_difference": "(a)*mu-*H",
+        "FASA_mod_atomic_dipole_moments_contributions_H_protonated": "protonated (a)*mu-ctb-*H",
+        "FASA_mod_atomic_dipole_moments_contributions_H_deprotonated": "deprotonated (a)*mu-ctb-*H",
+        "FASA_mod_atomic_dipole_moments_contributions_H_difference": "(a)*mu-ctb-*H",
+        "FASA_Atomic_electronic_spatial_extent_<r^2>_H_protonated": "protonated (a)tr-e*theta-*H",
+        "FASA_Atomic_electronic_spatial_extent_<r^2>_H_deprotonated": "deprotonated (a)tr-e*theta-*H",
+        "FASA_Atomic_electronic_spatial_extent_<r^2>_H_difference": "(a)tr-e*theta-*H",
+        "v_at_nucleus_H_protonated": "protonated ESP-nucl-*H",
+        "v_at_nucleus_H_deprotonated": "deprotonated ESP-nucl-*H",
+        "v_at_nucleus_H_difference": "ESP-nucl-*H",
+        "alie_atom_overall_avg_H_protonated": "protonated (a)avg-ALIE-*H",
+        "alie_atom_overall_avg_H_deprotonated": "deprotonated (a)avg-ALIE-*H",
+        "alie_atom_overall_avg_H_difference": "(a)avg-ALIE-*H",
+        "alie_atom_overall_variance_H_protonated": "protonated (a)var-ALIE-*H",
+        "alie_atom_overall_variance_H_deprotonated": "deprotonated (a)var-ALIE-*H",
+        "alie_atom_overall_variance_H_difference": "(a)var-ALIE-*H",
+        "alie_atom_max_val_H_protonated": "protonated (a)max-ALIE-*H",
+        "alie_atom_max_val_H_deprotonated": "deprotonated (a)max-ALIE-*H",
+        "alie_atom_max_val_H_difference": "(a)max-ALIE-*H",
+        "alie_atom_min_val_H_protonated": "protonated (a)min-ALIE-*H",
+        "alie_atom_min_val_H_deprotonated": "deprotonated (a)min-ALIE-*H",
+        "alie_atom_min_val_H_difference": "(a)min-ALIE-*H",
+        "lea_atom_min_val_H_protonated": "protonated (a)min-LEA-*H",
+        "lea_atom_min_val_H_deprotonated": "deprotonated (a)min-LEA-*H",
+        "lea_atom_min_val_H_difference": "(a)min-LEA-*H",
+        "lea_atom_max_val_H_protonated": "protonated (a)max-LEA-*H",
+        "lea_atom_max_val_H_deprotonated": "deprotonated (a)max-LEA-*H",
+        "lea_atom_max_val_H_difference": "(a)max-LEA-*H",
+        "lea_atom_overall_avg_H_protonated": "protonated (a)avg-LEA-*H",
+        "lea_atom_overall_avg_H_deprotonated": "deprotonated (a)avg-LEA-*H",
+        "lea_atom_overall_avg_H_difference": "(a)avg-LEA-*H",
+        "lea_atom_pos_avg_H_protonated": "protonated (a)var-LEA-*H",
+        "lea_atom_pos_variance_H_difference": "deprotonated (a)var-LEA-*H",
+        "lea_atom_neg_variance_H_deprotonated": "(a)var-LEA-*H",
+        "nbo_charges_H_protonated": "protonated NBO-chg-*H",
+        "nbo_charges_H_deprotonated": "deprotonated NBO-chg-*H",
+        "nbo_charges_H_difference": "NBO-chg-*H",
+        "chemical_isotropic_shield_H_protonated": "protonated NMR*delta-*H",
+        "chemical_isotropic_shield_H_deprotonated": "deprotonated NMR*delta-*H",
+        "chemical_isotropic_shield_H_difference": "NMR*delta-*H",
+        "rel_chemical_isotropic_shield_H_protonated": "protonated NMR*delta*relative*H",
+        "rel_chemical_isotropic_shield_H_deprotonated": "deprotonated NMR*delta*relative*H",
+        "rel_chemical_isotropic_shield_H_difference": "NMR*delta*relative*H",
+        "rel_chg_hirshfeld_H_protonated": "protonated Hirshfeld*relative*H",
+        "rel_chg_hirshfeld_H_deprotonated": "deprotonated Hirshfeld*relative*H",
+        "rel_chg_hirshfeld_H_difference": "Hirshfeld*relative*H",
+        "rel_chg_voronoy_H_protonated": "protonated Voronoy*relative*H",
+        "rel_chg_voronoy_H_deprotonated": "deprotonated Voronoy*relative*H",
+        "rel_chg_voronoy_H_difference": "Voronoy*relative*H",
+        "rel_chg_mulliken_H_protonated": "protonated Mulliken*relative*H",
+        "rel_chg_mulliken_H_deprotonated": "deprotonated Mulliken*relative*H",
+        "rel_chg_mulliken_H_difference": "Mulliken*relative*H",
+        "rel_chg_lowdin_H_protonated": "protonated Lowdin*relative*H",
+        "rel_chg_lowdin_H_deprotonated": "deprotonated Lowdin*relative*H",
+        "rel_chg_lowdin_H_difference": "Lowdin*relative*H",
+        "rel_chg_becke_H_protonated": "protonated Becke*relative*H",
+        "rel_chg_becke_H_deprotonated": "deprotonated Becke*relative*H",
+        "rel_chg_becke_H_difference": "Becke*relative*H",
+        "rel_chg_ADCH_H_protonated": "protonated ADCH*relative*H",
+        "rel_chg_ADCH_H_deprotonated": "deprotonated ADCH*relative*H",
+        "rel_chg_ADCH_H_difference": "ADCH*relative*H",
+        "rel_chg_CHELPG_H_protonated": "protonated CHELPG*relative*H",
+        "rel_chg_CHELPG_H_deprotonated": "deprotonated CHELPG*relative*H",
+        "rel_chg_CHELPG_H_difference": "CHELPG*relative*H",
+        "rel_chg_MK_H_protonated": "protonated MK*relative*H",
+        "rel_chg_MK_H_deprotonated": "deprotonated MK*relative*H",
+        "rel_chg_MK_H_difference": "MK*relative*H",
+        "rel_chg_CM5_H_protonated": "protonated CM5*relative*H",
+        "rel_chg_CM5_H_deprotonated": "deprotonated CM5*relative*H",
+        "rel_chg_CM5_H_difference": "CM5*relative*H",
+        "rel_chg_12CM5_H_protonated": "protonated 12CM5*relative*H",
+        "rel_chg_12CM5_H_deprotonated": "deprotonated 12CM5*relative*H",
+        "rel_chg_12CM5_H_difference": "12CM5*relative*H",
+        "rel_chg_RESP_H_protonated": "protonated RESP*relative*H",
+        "rel_chg_RESP_H_deprotonated": "deprotonated RESP*relative*H",
+        "rel_chg_RESP_H_difference": "RESP*relative*H",
+        "rel_chg_PEOE_H_protonated": "protonated PEOE*relative*H",
+        "rel_chg_PEOE_H_deprotonated": "deprotonated PEOE*relative*H",
+        "rel_chg_PEOE_H_difference": "PEOE*relative*H",
+        "rel_v_at_nucleus_H_protonated": "protonated ESP-nucl*relative*H",
+        "rel_v_at_nucleus_H_deprotonated": "deprotonated ESP-nucl*relative*H",
+        "rel_v_at_nucleus_H_difference": "ESP-nucl*relative*H",
+        "rel_nbo_charges_H_protonated": "protonated NBO-chg*relative*H",
+        "rel_nbo_charges_H_deprotonated": "deprotonated NBO-chg*relative*H",
+        "rel_nbo_charges_H_difference": "NBO-chg*relative*H",
+    }
+
+vector_features_publication_names={
+        "bo_mayer_protonated": "protonated Mayer-BO",
+        "bo_mayer_deprotonated": "deprotonated Mayer-BO",
+        "bo_mayer_difference": "Mayer-BO",
+        "bo_wiberg_protonated": "protonated WBO",
+        "bo_wiberg_deprotonated": "deprotonated WBO",
+        "bo_wiberg_difference": "WBO",
+        "bo_mulliken_protonated": "protonated Mulliken-BO",
+        "bo_mulliken_deprotonated": "deprotonated Mulliken-BO",
+        "bo_mulliken_difference": "Mulliken-BO",
+        "bo_fuzzy_protonated": "protonated FBO",
+        "bo_fuzzy_deprotonated": "deprotonated FBO",
+        "bo_fuzzy_difference": "FBO",
+        "bo_laplacian_protonated": "protonated LBO",
+        "bo_laplacian_deprotonated": "deprotonated LBO",
+        "bo_laplacian_difference": "LBO",
+        "bo_IBSI_protonated": "protonated IBSI",
+        "bo_IBSI_deprotonated": "deprotonated IBSI",
+        "bo_IBSI_difference": "IBSI",
+        "force_constants_protonated": "protonated FUERZA-FC",
+        "force_constants_deprotonated": "deprotonated FUERZA-FC",
+        "force_constants_difference": "FUERZA-FC",
+        "inv_distances_protonated": "protonated 1/BD",
+        "inv_distances_deprotonated": "deprotonated 1/BD",
+        "inv_distances_difference": "1/BD",
+        "distances_protonated": "protonated BD",
+        "distances_deprotonated": "deprotonated BD",
+        "distances_difference": "BD",
+        "nbo_nbi_bond_orders_protonated": "protonated NBI",
+        "nbo_nbi_bond_orders_deprotonated": "deprotonated NBI",
+        "nbo_nbi_bond_orders_difference": "NBI",
+        "nbo_wiberg_bond_orders_protonated": "protonated WBO-NAO",
+        "nbo_wiberg_bond_orders_deprotonated": "deprotonated WBO-NAO",
+        "nbo_wiberg_bond_orders_difference": "WBO-NAO",
+        "nbo_nlmonpa_bond_orders_protonated": "protonated NLMO-BO",
+        "nbo_nlmonpa_bond_orders_deprotonated": "deprotonated NLMO-BO",
+        "nbo_nlmonpa_bond_orders_difference": "NLMO-BO",
+        "molecular_dipole_projected_on_bonds_protonated": "protonated *mu*BP",
+        "molecular_dipole_projected_on_bonds_deprotonated": "deprotonated *mu*BP",
+        "molecular_dipole_projected_on_bonds_difference": "*mu*BP",
+        "polarizability_wr2_bonds_projected_on_bonds_protonated": "protonated *ind*mu*BP",
+        "polarizability_wr2_bonds_projected_on_bonds_deprotonated": "deprotonated *ind*mu*BP",
+        "polarizability_wr2_bonds_projected_on_bonds_difference": "*ind*mu*BP",
+        "polarizability_wr2_bonds_with_H_projected_on_bonds_protonated": "protonated *ind-*H*mu*BP",
+        "polarizability_wr2_bonds_with_H_projected_on_bonds_deprotonated": "deprotonated *ind-*H*mu*BP",
+        "polarizability_wr2_bonds_with_H_projected_on_bonds_difference": "*ind-*H*mu*BP",
+        "e_spatial_extent_projected_on_bonds_protonated": "protonated diag-e*theta*BP",
+        "e_spatial_extent_projected_on_bonds_deprotonated": "deprotonated diag-e*theta*BP",
+        "e_spatial_extent_projected_on_bonds_difference": "diag-e*theta*BP",
+        "tot_spatial_extent_projected_on_bonds_protonated": "protonated diag-*theta*BP",
+        "tot_spatial_extent_projected_on_bonds_deprotonated": "deprotonated diag-*theta*BP",
+        "tot_spatial_extent_projected_on_bonds_difference": "diag-*theta*BP",
+        "bo_mayer_H_protonated": "protonated Mayer-BO-*H",
+        "bo_mayer_H_deprotonated": "deprotonated Mayer-BO-*H",
+        "bo_mayer_H_difference": "Mayer-BO-*H",
+        "bo_wiberg_H_protonated": "protonated WBO-*H",
+        "bo_wiberg_H_deprotonated": "deprotonated WBO-*H",
+        "bo_wiberg_H_difference": "WBO-*H",
+        "bo_mulliken_H_protonated": "protonated Mulliken-BO-*H",
+        "bo_mulliken_H_deprotonated": "deprotonated Mulliken-BO-*H",
+        "bo_mulliken_H_difference": "Mulliken-BO-*H",
+        "bo_fuzzy_H_protonated": "protonated FBO-*H",
+        "bo_fuzzy_H_deprotonated": "deprotonated FBO-*H",
+        "bo_fuzzy_H_difference": "FBO-*H",
+        "bo_laplacian_H_protonated": "protonated LBO-*H",
+        "bo_laplacian_H_deprotonated": "deprotonated LBO-*H",
+        "bo_laplacian_H_difference": "LBO-*H",
+        "bo_IBSI_H_protonated": "protonated IBSI-*H",
+        "bo_IBSI_H_deprotonated": "deprotonated IBSI-*H",
+        "bo_IBSI_H_difference": "IBSI-*H",
+        "force_constants_H_protonated": "protonated FUERZA-FC-*H",
+        "force_constants_H_deprotonated": "deprotonated FUERZA-FC-*H",
+        "force_constants_H_difference": "FUERZA-FC-*H",
+        "rel_force_constants_H_protonated": "protonated FUERZA-FC*relative*H",
+        "rel_force_constants_H_deprotonated": "deprotonated FUERZA-FC*relative*H",
+        "rel_force_constants_H_difference": "FUERZA-FC*relative*H",
+        "inv_distances_H_protonated": "protonated 1/BD-*H",
+        "inv_distances_H_deprotonated": "deprotonated 1/BD-*H",
+        "inv_distances_H_difference": "1/BD-*H",
+        "distances_H_protonated": "protonated BD-*H",
+        "distances_H_deprotonated": "deprotonated BD-*H",
+        "distances_H_difference": "BD-*H",
+        "rel_distances_H_protonated": "protonated BD*relative*H",
+        "rel_distances_H_deprotonated": "deprotonated BD*relative*H",
+        "rel_distances_H_difference": "BD*relative*H",
+        "nbo_nbi_bond_orders_H_protonated": "protonated NBI-*H",
+        "nbo_nbi_bond_orders_H_deprotonated": "deprotonated NBI-*H",
+        "nbo_nbi_bond_orders_H_difference": "NBI-*H",
+        "nbo_wiberg_bond_orders_H_protonated": "protonated WBO-NAO-*H",
+        "nbo_wiberg_bond_orders_H_deprotonated": "deprotonated WBO-NAO-*H",
+        "nbo_wiberg_bond_orders_H_difference": "WBO-NAO-*H",
+        "nbo_nlmonpa_bond_orders_H_protonated": "protonated NLMO-BO-*H",
+        "nbo_nlmonpa_bond_orders_H_deprotonated": "deprotonated NLMO-BO-*H",
+        "nbo_nlmonpa_bond_orders_H_difference": "NLMO-BO-*H",
+        "rel_bo_mayer_H_protonated": "protonated Mayer-BO*relative*H",
+        "rel_bo_mayer_H_deprotonated": "deprotonated Mayer*relativeBO-*H",
+        "rel_bo_mayer_H_difference": "Mayer-BO*relative*H",
+        "rel_bo_wiberg_H_protonated": "protonated WBO*relative*H",
+        "rel_bo_wiberg_H_deprotonated": "deprotonated WBO*relative*H",
+        "rel_bo_wiberg_H_difference": "WBO*relative*H",
+        "rel_bo_mulliken_H_protonated": "protonated Mulliken-BO*relative*H",
+        "rel_bo_mulliken_H_deprotonated": "deprotonated Mulliken-BO*relative*H",
+        "rel_bo_mulliken_H_difference": "Mulliken-BO*relative*H",
+        "rel_bo_fuzzy_H_protonated": "protonated FBO*relative*H",
+        "rel_bo_fuzzy_H_deprotonated": "deprotonated FBO*relative*H",
+        "rel_bo_fuzzy_H_difference": "FBO*relative*H",
+        "rel_bo_laplacian_H_protonated": "protonated LBO*relative*H",
+        "rel_bo_laplacian_H_deprotonated": "deprotonated LBO*relative*H",
+        "rel_bo_laplacian_H_difference": "LBO*relative*H",
+        "rel_bo_IBSI_H_protonated": "protonated IBSI*relative*H",
+        "rel_bo_IBSI_H_deprotonated": "deprotonated IBSI*relative*H",
+        "rel_bo_IBSI_H_difference": "IBSI*relative*H",
+        "molecular_dipole_projected_on_bonds_H_protonated": "protonated *mu*BP-*H",
+        "molecular_dipole_projected_on_bonds_H_deprotonated": "deprotonated *mu*BP-*H",
+        "molecular_dipole_projected_on_bonds_H_difference": "*mu*BP-*H",
+        "polarizability_wr2_bonds_projected_on_bonds_H_protonated": "protonated *ind*mu*BP-*H",
+        "polarizability_wr2_bonds_projected_on_bonds_H_deprotonated": "deprotonated *ind*mu*BP-*H",
+        "polarizability_wr2_bonds_projected_on_bonds_H_difference": "*ind*mu*BP-*H",
+        "e_spatial_extent_projected_on_bonds_H_protonated": "protonated diag-e*theta*BP-*H",
+        "e_spatial_extent_projected_on_bonds_H_deprotonated": "deprotonated diag-e*theta*BP-*H",
+        "e_spatial_extent_projected_on_bonds_H_difference": "diag-e*theta*BP-*H",
+        "tot_spatial_extent_projected_on_bonds_H_protonated": "protonated diag-*theta*BP-*H",
+        "tot_spatial_extent_projected_on_bonds_H_deprotonated": "deprotonated diag-*theta*BP-*H",
+        "tot_spatial_extent_projected_on_bonds_H_difference": "diag-*theta*BP-*H",
+    }
+
+
+#fomat: pubilcation name is key, script name is value
+inv_atom_features_publication_names={v: k for k, v in atom_features_publication_names.items()}    
+inv_vector_features_publication_names={v: k for k, v in vector_features_publication_names.items()}  
+    
+
+
+#auxiliary methods
+def get_projected_molecular_dipole(molecule):
+
+    n_atoms=len(molecule.atom_list)
+    dipole_moment=np.array(molecule.QM_output.dipole_moments[0],dtype=np.float32)
+    diagonal_quadropole_moment_nuc=np.array(molecule.properties["quadrupole_moment"][1][1:4], dtype=np.float32)
+    diagonal_quadropole_moment_el=np.array(molecule.properties["quadrupole_moment"][1][1:4], dtype=np.float32)
+    diagonal_quadropole_moment_tot=np.array(molecule.properties["quadrupole_moment"][2][1:4], dtype=np.float32)
+    polarizability_matrix=np.array(molecule.properties["polarizability_matrix"],dtype=np.float32)
+    bond_dipoles=np.zeros((n_atoms,n_atoms),dtype=np.float32)
+    bond_polarizabilities=np.zeros((n_atoms,n_atoms),dtype=np.float32)
+    bond_e_extent=np.zeros((n_atoms,n_atoms),dtype=np.float32)
+    bond_chg_extent=np.zeros((n_atoms,n_atoms),dtype=np.float32)
+
+    #calculate the projection of the molecular dipole over unitary vectors (v) which direction is each bond in the molecule and
+    #the projection of the polarizability matrix:    v @ P @ v.T : the response to an electric field with the direction of each bond projected on each bond
+    for i,a in enumerate(molecule.atom_list):
+        for c in a.connection:
+            unitary_vector=molecule.atom(c[0]).coord-a.coord
+            unitary_vector=unitary_vector/np.linalg.norm(unitary_vector)
+            bond_dipoles[i,c[0]-1]=unitary_vector.dot(dipole_moment)
+            bond_e_extent[i,c[0]-1]=unitary_vector.dot(diagonal_quadropole_moment_el)
+            bond_chg_extent[i,c[0]-1]=unitary_vector.dot(diagonal_quadropole_moment_tot)
+            bond_polarizabilities[i,c[0]-1]= unitary_vector.dot( polarizability_matrix@np.transpose(unitary_vector) ) #bond polarizability with respect to a distortion with the same direction than the bond 
+
+
+    #calculate  v @ P @ vH.T (vH are the unitary vectors corresponding to X-H bonds)
+    #it represents the response to an electric field with the direction of each X-H bond, and this reponse is projected over each bond of the molecule.
+    #This is a tensor with as many matrix elements as atoms, but is zero for H atoms or atoms not bound to H. 
+    #The idea is to keep only the matrix corresponding to the bond that is broken during deprotonation(using the mask to filter it), so it will represent the 
+    #projection on each molecule bond when an electric field with the direction of teh scissible X-H bond is applied.
+    #First, find X-H bonds to project on it the polarizability matrix
+    bond_polarizabilities_wr2_H_bonds=[]
+    #iterate through all atoms searching for X-H bonds:
+    for j,a in enumerate(molecule.atom_list):
+        projected_polarizability=np.zeros(3)
+        for c in a.connection:
+            if molecule.atom(c[0]).symbol.lower()=="h":
+                bond_H_unitary_vector=molecule.atom(c[0]).coord-a.coord
+                bond_H_unitary_vector=bond_H_unitary_vector/np.linalg.norm(bond_H_unitary_vector)  
+                bond_H_unitary_vector_transp=np.transpose(bond_H_unitary_vector)
+                projected_polarizability+=polarizability_matrix@bond_H_unitary_vector_transp
+        #now project the projected polarizability on each bond
+        bond_polarizability_wr2_H_bonds=np.zeros((n_atoms,n_atoms))
+        for i,aa in enumerate(molecule.atom_list):
+            for cc in aa.connection:
+                unitary_vector=molecule.atom(cc[0]).coord-aa.coord
+                unitary_vector=unitary_vector/np.linalg.norm(unitary_vector)
+                bond_polarizability_wr2_H_bonds[i,cc[0]-1]=unitary_vector.dot(projected_polarizability)
+        bond_polarizabilities_wr2_H_bonds.append(bond_polarizability_wr2_H_bonds)
+
+    #for b in bond_polarizabilities_wr2_H_bonds: print("---");print (b);print("---") #borrame
+    return bond_dipoles,bond_polarizabilities,bond_polarizabilities_wr2_H_bonds,bond_e_extent,bond_chg_extent
+
+def get_force_constant_matrix(molecule,relative=False):
+
+    standard_hx_force_constants={"o": -0.484897971,"n": -0.438624438,"s":-0.281700975,"c":-0.343738615,"f":-0.583684055,
+                                  "cl":-0.328733906,"br":-0.284086875,"i":-0.219412699,"p":-0.226285462,"si":-0.18723526 }
+
+    force_constant_matrix=np.zeros((len(molecule.atom_list),len(molecule.atom_list)))
+    for i,a in enumerate(molecule.atom_list):
+        for j in range(i+1,len(molecule.atom_list)):
+            if molecule.distance_rcov_ratio([i+1,j+1] )<15:
+                hess=molecule.cart_hess[(i)*3:(i+1)*3,(j)*3:(j+1)*3]
+                unitary_vector=molecule.atom_list[j].coord-molecule.atom_list[i].coord
+                unitary_vector=unitary_vector/np.linalg.norm(unitary_vector)
+                eig,v=np.linalg.eig(hess)
+                fc=np.real(eig.dot( abs( (unitary_vector.dot(v)).T ) ) )
+                if relative==True: 
+                    if molecule.atom_list[i].symbol.lower()=="h" and molecule.atom_list[j].symbol.lower() in  standard_hx_force_constants.keys():
+                        fc=fc/standard_hx_force_constants[molecule.atom_list[j].symbol.lower()]           
+                    if molecule.atom_list[j].symbol.lower()=="h" and molecule.atom_list[i].symbol.lower() in  standard_hx_force_constants.keys():
+                        fc=fc/standard_hx_force_constants[molecule.atom_list[i].symbol.lower()]
+                    if molecule.atom_list[j].symbol.lower()!="h" and  molecule.atom_list[i].symbol.lower()!="h": #it only has sense with X-H bonds
+                        fc=0.0
+                    if molecule.atom_list[i].symbol.lower()=="h" and molecule.atom_list[j].symbol.lower() not in  standard_hx_force_constants.keys():
+                        fc=0.0
+                    if molecule.atom_list[j].symbol.lower()=="h" and molecule.atom_list[i].symbol.lower() not in  standard_hx_force_constants.keys():
+                        fc=0.0
+                force_constant_matrix[i,j],force_constant_matrix[j,i]= fc,fc 
+
+    return np.array(force_constant_matrix)
+
+def get_chemical_shifts(molecule,relative=False):
+
+    if level_of_theory=="swb97xd":
+        standard_chemical_shields={"o": 29.871    ,"n": 31.414     ,"s": 30.379     ,"c": 31.475   ,"p":29.567 }
+    elif level_of_theory=="wb97xd":
+        standard_chemical_shields={"o": 29.7465    ,"n": 31.306     ,"s": 30.069     ,"c":  31.439 ,"p":29.299   }
+    elif level_of_theory=="M06":
+        standard_chemical_shields={"o": 29.2885    ,"n": 31.009     ,"s": 30.121     ,"c":   31.368 , "p":29.296 }
+    elif level_of_theory=="sM06":
+        standard_chemical_shields={"o": 29.719    ,"n": 31.209     ,"s": 30.3185     ,"c":   31.380  , "p":29.482 }
+    elif level_of_theory=="pbeh3c":
+        standard_chemical_shields={"o": 30.757    ,"n": 32.440     ,"s":  31.077    ,"c":    31.9775 , "p":29.981 }
+
+
+    if relative==False: 
+        return [a.chemical_isotropic_shield for a in molecule.atom_list]
+    else:
+        chemical_shield=[]
+        for a in molecule.atom_list:
+            if a.symbol.lower()!="h": chemical_shield.append(0.0)
+            else: 
+                nearest_atom=molecule.nearest_atom(a,exclude_H=False)
+                if nearest_atom.symbol.lower() in standard_chemical_shields.keys():  
+                    #chemical_shield.append(a.chemical_isotropic_shield/standard_chemical_shields[nearest_atom.symbol.lower()]) 
+                    chemical_shield.append(a.chemical_isotropic_shield-standard_chemical_shields[nearest_atom.symbol.lower()])
+                else: chemical_shield.append(0.0)
+    return chemical_shield
+
+def get_relative_chg( prop,molecule, chg="hirshfeld"):
+                     
+    if level_of_theory=="wb97xd":
+        standard_charge=   {'nbo_charges': {'o': 0.49883,'n': 0.37201,'s': 0.169545,'c': 0.216585,'p': 0.015260000000000001},
+                            'nbo_wiberg_bond_orders': {'o': 0.7528,'n': 0.8641,'s': 0.7528,'c': 0.7528,'p': 0.9935},
+                            'nbo_nbi_bond_orders': {'o': 0.86765,'n': 0.9295,'s': 0.86765,'c': 0.86765,'p': 0.9968},
+                            'chg_hirshfeld': {'o': 0.1725863139,'n': 0.1024221241,'s': 0.06791736379999999,'c': 0.035183041799999995,'p': -0.0028007566000000004},
+                            'chg_voronoy': {'o': 0.17202549445,'n': 0.0845488378,'s': 0.050787776800000003,'c': 0.016594933025,'p': -0.014473655566666667},
+                            'chg_mulliken': {'o': 0.24152026555,'n': 0.1199831695,'s': 0.20404007985,'c': 0.19101352885,'p': 0.10266966746666667},
+                            'chg_lowdin': {'o': -0.11006040235,'n': -0.0929007778,'s': -0.1840488167,'c': -0.019478534125,'p': -0.12130745496666667},
+                            'chg_becke': {'o': 0.4321113305,'n': 0.3739296238,'s': 0.1587268855,'c': 0.08661472567499999,'p': 0.10519333609999999},
+                            'chg_ADCH': {'o': 0.4319213384,'n': 0.3738931674,'s': 0.15870532664999998,'c': 0.10043777079999999,'p': 0.105195696},
+                            'chg_CHELPG': {'o': 0.4370904984,'n': 0.3715590166,'s': 0.17127069,'c': 0.10727942134999999,'p': 0.092598145},
+                            'chg_MK': {'o': 0.43542340845000005,'n': 0.3703189449,'s': 0.17672060905,'c': 0.13856654675000002,'p': 0.09682439463333332},
+                            'chg_CM5': {'o': 0.3393364353,'n': 0.2828386456,'s': 0.1327481476,'c': 0.083242792525,'p': 0.0774737913},
+                            'chg_12CM5': {'o': 0.4072045011,'n': 0.339406373,'s': 0.1592980366,'c': 0.099891422275,'p': 0.0929685805},
+                            'chg_RESP': {'o': 0.43531845565,'n': 0.3701705139,'s': 0.17665694955,'c': 0.1349474418,'p': 0.0967564852},
+                            'chg_PEOE': {'o': 0.2057302845,'n': 0.1146232457,'s': 0.09844511,'c': 0.0194090064,'p': 0.0511157583},
+                            'bo_mayer': {'o': 0.9579397350000001,'n': 1.00622828,'s': 0.959181525,'c': 0.958419705,'p': 0.9840430333333333},
+                            'bo_wiberg': {'o': 1.47048409,'n': 1.24389768,'s': 1.452707965,'c': 1.0101066825,'p': 1.2105345099999998},
+                            'bo_mulliken': {'o': 0.547459175,'n': 0.57686189,'s': 0.68378313,'c': 0.770127225,'p': 0.7419388466666667},
+                            'bo_fuzzy': {'o': 0.947374575,'n': 0.97477589,'s': 1.101478555,'c': 0.959470505,'p': 1.0346146366666666},
+                            'bo_laplacian': {'o': 0.588106335,'n': 0.80299111,'s': 0.83899552,'c': 0.916348085,'p': 0.8479969799999999},
+                            'bo_IBSI': {'o': 1.689635,'n': 1.49291,'s': 0.8854500000000001,'c': 1.204155,'p': 0.72317},
+                            'v_at_nucleus': {'o': -616.6619000000001,'n': -663.3706,'s': -631.02265,'c': -705.199625,'p': -671.6128666666667},
+                        }
+
+    elif level_of_theory=="swb97xd":
+        standard_charge=   {'nbo_charges': {'o': 0.514205,'n': 0.39446,'s': 0.20133,'c': 0.22870000000000001,'p': 0.03818666666666667},
+                            'nbo_wiberg_bond_orders': {'o': 0.73775,'n': 0.8488,'s': 0.73775,'c': 0.73775,'p': 0.9937999999999999},
+                            'nbo_nbi_bond_orders': {'o': 0.8589,'n': 0.9213,'s': 0.8589,'c': 0.8589,'p': 0.9969},
+                            'chg_hirshfeld': {'o': 0.17140098264999998,'n': 0.100787386,'s': 0.06800739580000001,'c': 0.033157719749999995,'p': -0.004217904133333333},
+                            'chg_voronoy': {'o': 0.17106733305,'n': 0.0813914429,'s': 0.0541260749,'c': 0.0120423579,'p': -0.015627346900000002},
+                            'chg_mulliken': {'o': 0.1884347716,'n': 0.020701852,'s': 0.20654445295,'c': -0.032302276825000004,'p': 0.10050543113333332},
+                            'chg_lowdin': {'o': 0.02279972635,'n': -0.0288275325,'s': -0.17520213815,'c': -0.0054768921,'p': -0.15087846653333334},
+                            'chg_becke': {'o': 0.43795799874999997,'n': 0.3764778339,'s': 0.16787927015,'c': 0.081637949375,'p': 0.1118346376},
+                            'chg_ADCH': {'o': 0.43772293075,'n': 0.3764538683,'s': 0.1678340636,'c': 0.096871895675,'p': 0.11182524919999999},
+                            'chg_CHELPG': {'o': 0.44167791884999996,'n': 0.3742680649,'s': 0.18305080675000002,'c': 0.0861691261,'p': 0.10174804326666666},
+                            'chg_MK': {'o': 0.44086090460000005,'n': 0.3738026011,'s': 0.18761083364999998,'c': 0.1179070139,'p': 0.1045490584},
+                            'chg_CM5': {'o': 0.3381507937,'n': 0.2812030591,'s': 0.13283899995,'c': 0.08121696172500001,'p': 0.07605634859999999},
+                            'chg_12CM5': {'o': 0.40578157735,'n': 0.3374433519,'s': 0.159407463,'c': 0.0974602172,'p': 0.09126758156666666},
+                            'chg_RESP': {'o': 0.44075593495,'n': 0.3736541589,'s': 0.18754690625,'c': 0.1143139945,'p': 0.10448063006666668},
+                            'chg_PEOE': {'o': 0.2057302845,'n': 0.1146232457,'s': 0.09844511,'c': 0.0194090064,'p': 0.0511157583},
+                            'bo_mayer': {'o': 1.008377185,'n': 0.97685336,'s': 1.010858845,'c': 0.982458305,'p': 1.0746831666666667},
+                            'bo_wiberg': {'o': 1.365635555,'n': 1.22268994,'s': 1.471713475,'c': 1.0038537225,'p': 1.21444271},
+                            'bo_mulliken': {'o': 0.67977255,'n': 0.13306099,'s': 0.768183965,'c': 0.7970229125000001,'p': 0.8566823266666667},
+                            'bo_fuzzy': {'o': 0.9494265,'n': 0.97743699,'s': 1.102003705,'c': 0.9619661125000001,'p': 1.03557185},
+                            'bo_laplacian': {'o': 0.66925256,'n': 0.92836282,'s': 0.92204453,'c': 1.0286782700000001,'p': 0.9303369333333333},
+                            'bo_IBSI': {'o': 1.689635,'n': 1.49291,'s': 0.8854500000000001,'c': 1.204155,'p': 0.72317},
+                            'v_at_nucleus': {'o': -605.73595,'n': -654.5955,'s': -620.38755,'c': -696.86455,'p': -664.6113333333334},
+                            }
+
+    elif level_of_theory=="M06":
+        standard_charge=   {'nbo_charges': {'o': 0.50336,'n': 0.37276,'s': 0.1661,'c': 0.21522000000000002,'p': 0.012586666666666664},
+                            'nbo_wiberg_bond_orders': {'o': 0.7482,'n': 0.8634,'s': 0.7482,'c': 0.7482,'p': 0.9937999999999999},
+                            'nbo_nbi_bond_orders': {'o': 0.86495,'n': 0.9292,'s': 0.86495,'c': 0.86495,'p': 0.9969},
+                            'chg_hirshfeld': {'o': 0.17331986545,'n': 0.10093287,'s': 0.06449352625,'c': 0.033971035999999996,'p': -0.0054867878},
+                            'chg_voronoy': {'o': 0.17261975395,'n': 0.0830280308,'s': 0.0460573435,'c': 0.015627289250000002,'p': -0.018210788699999998},
+                            'chg_mulliken': {'o': 0.32032757805,'n': 0.209094652,'s': 0.20052566015,'c': 0.202639978125,'p': 0.08950893433333333},
+                            'chg_lowdin': {'o': -0.10726837659999999,'n': -0.0919646654,'s': -0.1881296834,'c': -0.01928508285,'p': -0.12530034356666667},
+                            'chg_becke': {'o': 0.4336866693,'n': 0.3669306579,'s': 0.1519521747,'c': 0.08416353215,'p': 0.09391960016666667},
+                            'chg_ADCH': {'o': 0.43352492135,'n': 0.3668967178,'s': 0.15193175675,'c': 0.09822651225,'p': 0.09392166623333333},
+                            'chg_CHELPG': {'o': 0.43891924685,'n': 0.3656295445,'s': 0.1647269378,'c': 0.10424605077499999,'p': 0.0816843728},
+                            'chg_MK': {'o': 0.43711933665,'n': 0.3637850557,'s': 0.17038234325,'c': 0.135534974925,'p': 0.08584806796666666},
+                            'chg_CM5': {'o': 0.3400696976,'n': 0.2813493877,'s': 0.12932431215,'c': 0.082030797075,'p': 0.0747877619},
+                            'chg_12CM5': {'o': 0.408084276,'n': 0.3376192621,'s': 0.1551894284,'c': 0.098437030875,'p': 0.08974534449999999},
+                            'chg_RESP': {'o': 0.43701437855,'n': 0.3636366463,'s': 0.17031886195,'c': 0.1319187706,'p': 0.08578111853333333},
+                            'chg_PEOE': {'o': 0.2057302845,'n': 0.1146232457,'s': 0.09844511,'c': 0.0194090064,'p': 0.0511157583},
+                            'bo_mayer': {'o': 0.90130771,'n': 0.95001413,'s': 0.9562266500000001,'c': 0.9498424050000001,'p': 0.9770021566666666},
+                            'bo_wiberg': {'o': 1.4697270150000001,'n': 1.24380053,'s': 1.456133675,'c': 1.009915745,'p': 1.21237528},
+                            'bo_mulliken': {'o': 0.55028609,'n': 0.55521687,'s': 0.66608068,'c': 0.767807245,'p': 0.7168581233333334},
+                            'bo_fuzzy': {'o': 0.9456811700000001,'n': 0.97538396,'s': 1.10379687,'c': 0.9595951749999999,'p': 1.03580098},
+                            'bo_laplacian': {'o': 0.54798705,'n': 0.77156567,'s': 0.83096226,'c': 0.9032477950000001,'p': 0.8565219766666669},
+                            'bo_IBSI': {'o': 1.689635,'n': 1.49291,'s': 0.8854500000000001,'c': 1.204155,'p': 0.72317},
+                            'v_at_nucleus': {'o': -611.7636,'n': -660.5866,'s': -630.46865,'c': -704.8297749999999,'p': -672.1591}
+                            }
+
+    elif level_of_theory=="sM06":
+        standard_charge=   {'nbo_charges': {'o': 0.5171600000000001,'n': 0.39541,'s': 0.19881,'c': 0.22926000000000002,'p': 0.033253333333333336},
+                            'nbo_wiberg_bond_orders': {'o': 0.7346,'n': 0.848,'s': 0.7346,'c': 0.7346,'p': 0.9944000000000001},
+                            'nbo_nbi_bond_orders': {'o': 0.8571,'n': 0.9209,'s': 0.8571,'c': 0.8571,'p': 0.9972},
+                            'chg_hirshfeld': {'o': 0.17243224140000002,'n': 0.1001908683,'s': 0.06561705975,'c': 0.032467605525,'p': -0.007793036566666667},
+                            'chg_voronoy': {'o': 0.17165919455,'n': 0.079998794,'s': 0.04945623395,'c': 0.010862455125,'p': -0.020582458833333334},
+                            'chg_mulliken': {'o': 0.19958019555,'n': 0.0215904832,'s': 0.2112970002,'c': -0.0328017205,'p': 0.10720634493333335},
+                            'chg_lowdin': {'o': 0.0253578338,'n': -0.0294629137,'s': -0.1794578005,'c': -0.007410244775,'p': -0.15683254970000002},
+                            'chg_becke': {'o': 0.4369981652,'n': 0.3678711978,'s': 0.1632218459,'c': 0.08073846374999999,'p': 0.09904392396666667},
+                            'chg_ADCH': {'o': 0.43677742465,'n': 0.367847952,'s': 0.16317446195000002,'c': 0.095905083325,'p': 0.09903457216666667},
+                            'chg_CHELPG': {'o': 0.4408647612,'n': 0.3668510433,'s': 0.1787528306,'c': 0.08784972225000001,'p': 0.08950897116666667},
+                            'chg_MK': {'o': 0.43993784525,'n': 0.3657577738,'s': 0.1834283468,'c': 0.120484687375,'p': 0.09206345733333332},
+                            'chg_CM5': {'o': 0.33918194135,'n': 0.2806065452,'s': 0.13044870495,'c': 0.08052684897500001,'p': 0.07248121516666667},
+                            'chg_12CM5': {'o': 0.40701890220000003,'n': 0.3367275374,'s': 0.1565391169,'c': 0.09663208367500001,'p': 0.08697742293333333},
+                            'chg_RESP': {'o': 0.43983287839999996,'n': 0.3656093576,'s': 0.1833645171,'c': 0.1168884989,'p': 0.09199592713333334},
+                            'chg_PEOE': {'o': 0.2057302845,'n': 0.1146232457,'s': 0.09844511,'c': 0.0194090064,'p': 0.0511157583},
+                            'bo_mayer': {'o': 0.9965518,'n': 0.978011,'s': 1.00074018,'c': 0.9821233374999999,'p': 1.0609337266666667},
+                            'bo_wiberg': {'o': 1.363235545,'n': 1.2226635,'s': 1.47483657,'c': 1.0037474675,'p': 1.2163574166666666},
+                            'bo_mulliken': {'o': 0.663194445,'n': 0.15956516,'s': 0.75632138,'c': 0.7975682574999999,'p': 0.83985747},
+                            'bo_fuzzy': {'o': 0.947957735,'n': 0.97781646,'s': 1.1036871000000001,'c': 0.962233675,'p': 1.0370240266666666},
+                            'bo_laplacian': {'o': 0.6587043349999999,'n': 0.92622183,'s': 0.92694922,'c': 1.0263663225,'p': 0.9306397299999999},
+                            'bo_IBSI': {'o': 1.689635,'n': 1.49291,'s': 0.8854500000000001,'c': 1.204155,'p': 0.72317},
+                            'v_at_nucleus': {'o': -603.14645,'n': -653.4269,'s': -619.6114,'c': -695.6282500000001,'p': -664.958},
+                            }
+
+    elif level_of_theory=="pbeh3c": 
+        standard_charge=   {'nbo_charges': {'o': 0.50815,'n': 0.39085,'s': 0.182355,'c': 0.22971999999999998,'p': 0.02240333333333333},
+                            'nbo_wiberg_bond_orders': {'o': 0.7418,'n': 0.8472,'s': 0.7418,'c': 0.7418,'p': 0.9941},
+                            'nbo_nbi_bond_orders': {'o': 0.86125,'n': 0.9204,'s': 0.86125,'c': 0.86125,'p': 0.997},
+                            'chg_hirshfeld': {'o': 0.1905610162,'n': 0.1109055985,'s': 0.07776023195000001,'c': 0.036585679,'p': 0.0021802815000000002},
+                            'chg_voronoy': {'o': 0.20057303425,'n': 0.1012828991,'s': 0.0906680465,'c': 0.02093110275,'p': -0.001363665},
+                            'chg_mulliken': {'o': 0.45471951945,'n': 0.3424360946,'s': 0.22577799599999998,'c': 0.231474828725,'p': 0.11289274093333335},
+                            'chg_lowdin': {'o': 0.3703919455,'n': 0.2688547916,'s': 0.1468233268,'c': 0.16494621645000002,'p': 0.07300937596666666},
+                            'chg_becke': {'o': 0.4469565783,'n': 0.3888989125,'s': 0.20501285695,'c': 0.09101329989999998,'p': 0.13075999536666666},
+                            'chg_ADCH': {'o': 0.4469487045,'n': 0.3888727262,'s': 0.2050235742,'c': 0.103312470575,'p': 0.13077291276666667},
+                            'chg_CHELPG': {'o': 0.4540982739,'n': 0.392007253,'s': 0.2170219944,'c': 0.129451173025,'p': 0.1205248201},
+                            'chg_MK': {'o': 0.4518616422,'n': 0.3876915247,'s': 0.21827006854999997,'c': 0.164140149675,'p': 0.1229121943},
+                            'chg_CM5': {'o': 0.3573093059,'n': 0.2913212718,'s': 0.14259058949999998,'c': 0.084645072525,'p': 0.08245481013333333},
+                            'chg_12CM5': {'o': 0.42877104504999997,'n': 0.3495851958,'s': 0.1711087611,'c': 0.10157400845,'p': 0.0989458003},
+                            'chg_RESP': {'o': 0.4517566405,'n': 0.3875430412,'s': 0.21820557965,'c': 0.1605050264,'p': 0.1228428746},
+                            'chg_PEOE': {'o': 0.2057302845,'n': 0.1146232457,'s': 0.09844511,'c': 0.0194090064,'p': 0.0511157583},
+                            'bo_mayer': {'o': 0.782426225,'n': 0.86759229,'s': 0.9205561,'c': 0.93207973,'p': 0.9590220233333334},
+                            'bo_wiberg': {'o': 0.8778146099999999,'n': 0.93691806,'s': 0.988363,'c': 0.9728263825,'p': 1.0000357066666667},
+                            'bo_mulliken': {'o': 0.5805700149999999,'n': 0.67686849,'s': 0.60310116,'c': 0.7536101024999999,'p': 0.6911617566666667},
+                            'bo_fuzzy': {'o': 0.920020115,'n': 0.95926686,'s': 1.0726820799999999,'c': 0.95851575,'p': 1.0272596766666666},
+                            'bo_laplacian': {'o': 0.51630396,'n': 0.73264462,'s': 0.651612035,'c': 0.7920171699999999,'p': 0.70830269},
+                            'bo_IBSI': {'o': 1.689635,'n': 1.49291,'s': 0.8854500000000001,'c': 1.204155,'p': 0.72317},
+                            'v_at_nucleus': {'o': -615.1726,'n': -663.2573,'s': -623.1650500000001,'c': -700.5221750000001,'p': -664.5396999999999},
+                            }
+
+
+    if type(prop)==list and type(prop[0])==float:
+        relative_charge=[]
+        for i,p in enumerate(prop):
+            if molecule.atom_list[i].symbol.lower()!="h": relative_charge.append(0.0)
+            else:
+                nearest_atom=molecule.nearest_atom(molecule.atom_list[i],exclude_H=True)
+                if nearest_atom.symbol.lower() in standard_charge[chg].keys():
+                    if False: #chg!="list_of_chgs_on_which_is_better_to_use_difference_instead_of_ratio":
+                        relative_charge.append(p/standard_charge[chg][nearest_atom.symbol.lower()])
+                    else: #better use_difference_instead_of_ratio
+                        relative_charge.append(p-standard_charge[chg][nearest_atom.symbol.lower()])
+                else: relative_charge.append(0.0)
+        return relative_charge
+
+    elif type(prop)==list and type(prop[0])==list:
+        new_matrix=np.zeros([len(prop),len(prop)])
+        for i in range(len(prop)):
+            if molecule.atom_list[i].symbol.lower()=="h":
+                nearest_atom=molecule.nearest_atom(molecule.atom_list[i],exclude_H=True)
+                if nearest_atom.symbol.lower() in standard_charge[chg].keys():
+                    new_matrix[i,nearest_atom.atom_number-1]=prop[i][nearest_atom.atom_number-1]/standard_charge[chg][nearest_atom.symbol.lower()]
+                    new_matrix[nearest_atom.atom_number-1,i]=prop[i][nearest_atom.atom_number-1]/standard_charge[chg][nearest_atom.symbol.lower()]
+        return new_matrix
+
+def get_NBO_charges(filename):
+    with open (filename,"r") as f: lines=f.readlines()
+    #charges_section_start_line=lines.index(" Summary of Natural Population Analysis:                  \n")+6
+    charges_section_start_line=lines.index(" Summary of Natural Population Analysis:\n")+6
+    charges=[]
+    for i in range(charges_section_start_line,len(lines)):
+        if "==========" in lines[i]: break
+        charges.append(float(lines[i].split()[2]))
+    return charges
+
+def read_NBO_BO_matrix(start_text,stop_text,nbo_file):
+
+    if not start_text.endswith("\n"): start_text+="\n"
+    if not stop_text.endswith("\n"): stop_text+="\n"
+    with open (nbo_file,"r") as f: nbo_lines=f.readlines()
+    nbo_lines=nbo_lines[nbo_lines.index(start_text):nbo_lines.index(stop_text)]
+
+    #find out the number of atoms:
+    shift=0
+    for i in range(0,len(nbo_lines)):
+        if nbo_lines[i][4:6]==". ": n_atoms=int(nbo_lines[i][0:4])
+        if "Atom" in nbo_lines[i]:
+            if shift==0:shift=i #the first time "Atom" is read, it is used for defining "shift"
+            else: break #next time, do not keep on reading
+        
+    #define the matrix
+    BO=[ [0.0 for _ in range(0,n_atoms)] for _ in range(0,n_atoms)  ]
+
+    for i in range(shift,len(nbo_lines),n_atoms+3):
+        column_indexes=[int(w)  for w in nbo_lines[i].split()[1:]]
+        for line in nbo_lines[i+2:i+n_atoms+2]:
+            row_index=int(line.split(".")[0])
+            for w,column_index in zip(line.split()[2:],column_indexes)   :
+                BO[row_index-1][column_index-1]=float(w)
+    return BO
+
+def get_nbo_wiberg_matrix(nbo_file):
+    start=" Wiberg bond index matrix in the NAO basis:\n"
+    finish=" Wiberg bond index, Totals by atom:\n"
+    return read_NBO_BO_matrix(start,finish,nbo_file)
+
+def get_nbo_nbi_matrix(nbo_file):
+    start=" NBI: Natural Binding Index (NCU strength parameters)\n"
+    finish=" NATURAL BOND ORBITAL ANALYSIS:\n"
+    return read_NBO_BO_matrix(start,finish,nbo_file)
+
+def get_nbo_nlmonpa_matrix(nbo_file):
+    start=" Atom-Atom Net Linear NLMO/NPA Bond Orders:\n"
+    finish=" Linear NLMO/NPA Bond Orders, Totals by Atom:\n"
+    return read_NBO_BO_matrix(start,finish,nbo_file)    
+
+#read the repeated_molecules file to get the number of equivalent structures for modifiying populations 
+def get_n_identical_structures(filename):
+    filename=filename.split("/")[-1]
+
+    if filename[-4:]==".out":filename=filename.split(".out")[0]
+
+    if "-cation" in filename: compn=filename.split("-cation")[0]+"-cation*"
+    elif "-2cation" in filename: compn=filename.split("-2cation")[0]+"-2cation*"
+    elif "-3cation" in filename: compn=filename.split("-3cation")[0]+"-3cation*"
+    elif "-4cation" in filename: compn=filename.split("-4cation")[0]+"-4cation*"
+    elif "-5cation" in filename: compn=filename.split("-5cation")[0]+"-5cation*"
+    elif "-6cation" in filename: compn=filename.split("-6cation")[0]+"-6cation*"
+    elif "-neut" in filename: compn=filename.split("-neut")[0]+"-neut*" 
+    elif "-an"in filename: compn=filename.split("-an")[0]+"-an*"
+    elif "-2an"in filename: compn=filename.split("-2an")[0]+"-2an*"
+    elif "-3an"in filename: compn=filename.split("-3an")[0]+"-3an*"
+    elif "-4an"in filename: compn=filename.split("-4an")[0]+"-4an*"
+    elif "-5an"in filename: compn=filename.split("-5an")[0]+"-5an*"
+    elif "-6an"in filename: compn=filename.split("-6an")[0]+"-6an*"
+
+
+    if filename in repeated_molecules.repeated_molecules.keys(): return repeated_molecules.repeated_molecules[filename]
+    elif compn in repeated_molecules.repeated_molecules.keys(): return repeated_molecules.repeated_molecules[compn]
+    else: return 1
+
+#returns a list of lists, each of it consisting in the list of equilvalent atoms 
+# equivalence is stablished by comparing Molecular_structre fingerprints (without geometrical information)
+def get_groups_of_equivalent_atoms(molecule):
+    groups_of_eq_atoms=[]
+    molecule.set_fingerprints(refine=False)
+    for i in range(0,len(molecule.atom_list)):
+        if not any(i+1 in r for r in groups_of_eq_atoms):
+            gp=[i+1]
+            for j in range(i+1,len(molecule.atom_list)):
+                if molecule.atom_list[j].fingerprint==molecule.atom_list[i].fingerprint: gp.append(j+1)
+            groups_of_eq_atoms.append(sorted(gp))
+    fingerprints=[]
+    for g in groups_of_eq_atoms:
+        fingerprints.append(molecule.atom_list[g[0]-1].fingerprint)
+
+    return groups_of_eq_atoms,fingerprints            
+
+#returns the connections between groups of equivalent atoms.
+#if a is in group A and b in group B and they are connected, [a,b] is added to the list
+def get_connections(molecule,groups_of_equivalent_atoms,diag_zero=False):
+    connections=[]
+    for i in range(0,len(groups_of_equivalent_atoms)):
+        for j in range(i,len(groups_of_equivalent_atoms)):
+            for c in molecule.atom(groups_of_equivalent_atoms[i][0]).connection:
+                if (c[0]) in groups_of_equivalent_atoms[j]: connections.append([i,j])
+    if diag_zero:
+        connections=[c for c in connections if c[0]!=c[1]]
+
+    return connections
+
+#returns the groups of equivalent atoms (list of lists), the connections between groups (list of lists) and a nx graph object
+def equivalent_atoms_from_molecule(m):
+    #equivalent (by 2D symmetry) atoms are grouped together:
+    groups_of_equivalent_atoms,fingerprints=get_groups_of_equivalent_atoms(m)   #indexes start at 1, not 0!!!
+    connections_between_groups=get_connections(m,groups_of_equivalent_atoms)
+    """
+    for g,f in zip(groups_of_equivalent_atoms,fingerprints):#borrame
+        print ("with fingerprint: "+str(f)+" the following group: "+str(g))#borrame
+    print ("connections between groups: "+str(connections_between_groups)) #borrame
+    """
+
+    #build a graph whose nodes are each group of equilvalent atoms and connected depending on connections_between_groups
+    G=nx.Graph()
+    #to ensure that all nodes have a different identifier, the fingerprint is added to the nodes. It must be cast to str because list are not hashable
+    #print ([(i,{"fingerprint":  fingerprints[i]    })     for i,g in enumerate(groups_of_equivalent_atoms)])
+    G.add_nodes_from([(i,{"fingerprint":  str(fingerprints[i])    })     for i,g in enumerate(groups_of_equivalent_atoms)])
+    G.add_edges_from(connections_between_groups)
+
+    return groups_of_equivalent_atoms,connections_between_groups,G
+
+"""
+#returns a networkX graph from a molecule. Each node in the graph is added "labels" dictionary 
+# if use_symmetry, only one node of each equivalent atom is kept, and their features are calculated from the features of equivalent atoms
+# using symmetry_method ("sum" or "mean")
+def graph_from_molecule(molecule,labels=""):
+
+    G=nx.Graph()
+     
+    if labels=="":
+        nodes=[(k,{"symbol":molecule.atom_list[k].symbol.lower()}) for k in range(0,len(molecule.atom_list))]
+    elif type(labels)==list and type(labels[0])==dict:
+        nodes=[(k,l) for k,l in enumerate(labels)]
+    G.add_nodes_from(nodes)
+    for a in molecule.atom_list:
+        for aa in a.connection: G.add_edge(a.atom_number-1,aa[0]-1)   
+        
+    return G
+            
+
+def get_feature_names_from_nx_graph(nx_graph):
+    labels=nx_graph.nodes()
+    feature_keys=[k for k in labels[0].keys() if type(labels[0][k])==np.float64 or type(labels[0][k])==float]
+    vector_keys=[k for k in labels[0].keys() if type(labels[0][k])==np.ndarray or type(labels[0][k])==list]
+    return {"feature_keys":feature_keys,"vector_keys":vector_keys}
+
+# creates a json object from a graph that can be read to generate a spektral graph
+def nx_graph_to_json(nx_graph,name):
+    
+    a=list(nx.adjacency_matrix(nx_graph).todense())
+    keys=get_feature_names_from_nx_graph(nx_graph)
+    feature_keys,vector_keys=keys["feature_keys"],keys["vector_keys"]
+
+
+    #keys=list(nx_graph.nodes.data()[0].keys())
+    #feature_keys,vector_keys=[],[]
+    #for k in keys:
+    #    if type(nx_graph.nodes.data()[0][k])==np.float64 or type(nx_graph.nodes.data()[0][k])==float: feature_keys.append(k)
+    #    elif type(nx_graph.nodes.data()[0][k])==np.ndarray or type(nx_graph.nodes.data()[0][k])==list: vector_keys.append(k)
+
+    #create the matrix with the features
+    x=[]
+    for d in nx_graph.nodes.data():
+        xx=[]
+        for k in feature_keys:
+            xx.append(d[1][k])
+        x.append(xx)
+
+    #create the matrices with the bond orders (the edge matrices)
+    e=[]
+
+    for k in vector_keys:
+        ee=[]
+        for d in nx_graph.nodes.data():
+            #ee is a matrix in which element in row i and column j indicates how the bond order between atom i and j changes upon protonation
+            #for _original matrices, diagonal elements are 0 (atom is not bound to itself)
+            #for the _added bond orders, it indicates how the bond between united atom j and atom i (not united atom i... it is not symmetrical) changes upon protonation
+            #diagonal elements indicates how the bond between each atom and H atoms bound to it changes upon protonation -it is very large for the H atoms lost in the deprotonation-.
+            #ith element of: np.sum(ee,axis=1) is the change of bond orders of united atom i 
+            ee.append(d[1][k])
+            # for softmax:
+            #ee=np.array([np.exp(np.abs(b))/np.sum(np.exp(np.abs(b))) for b in ee] )
+        #if k=="bo_mayer_original": print (np.array(ee)) #borrame
+        e.append(ee)
+    e=np.array(e)
+
+    #e=np.array(e).transpose(2,1,0) #this is what spektra is waiting for e: (n_nodes)x(n_nodes)x(n_edge_features) ????
+
+    y=name
+
+    return json.dumps({"label":name,"x":x,"a":a,"e":e,"y":y},cls=NpEncoder)
+
+
+# reads a spektral graph from json object generated by nx_graph_to_json
+def spektral_graph_from_json(json_text):
+    
+    d=json.loads(json_text)
+    x=np.array(d["x"])
+    a=np.array(d["a"])
+    e=np.array(d["e"])
+    y=d["y"] #dictionary that contains the names of the features and the name of the compounds 
+    return spektral.data.graph.Graph(x=x,a=a,y=y,e=e)
+
+#creates a spektral graph from networkx graph
+def spektral_graph_from_nx_graph(nx_graph,name):
+    json_line=nx_graph_to_json(nx_graph,name)
+    return spektral_graph_from_json(json_line)
+"""
+
+
+
+
+
+#returns a list of dictionaries for the atomic properties, removing H and adding their properties to the nearest atom, reducing the molecule according to the symmetry
+#and ensuring that the order of the atoms is equivalent to the reference molecule passed
+#it requires both HL and geometry optimization molecules so chemical shifts and fuerza´s bond order can be extracted, and the HL file name to read multifwn files and NBO stuff.
+#the order of the dictionaries is consistent with the oder of the list of molecules and filenames (which must match)
+def get_lists_of_properties_for_symmetry_reduced_graph(molecules_HL,molecules,HL_molecules_file_names,ref_molecule):
+
+    props=[]
+    #read NBO charges, bond orders ans ei berg bond orders from NBO files
+    NBO_charges=[get_NBO_charges(nbo_route+filename[:-4].split("/")[-1]+".nbo.out") for filename in HL_molecules_file_names ]
+    NBO_nbi_bond_orders=[get_nbo_nbi_matrix(nbo_route+filename[:-4].split("/")[-1]+".nbo.out") for filename in HL_molecules_file_names ]
+    NBO_wiberg_bond_orders=[get_nbo_wiberg_matrix(nbo_route+filename[:-4].split("/")[-1]+".nbo.out") for filename in HL_molecules_file_names ]
+    NBO_NLMO_NPA_bond_orders=[get_nbo_nlmonpa_matrix(nbo_route+filename[:-4].split("/")[-1]+".nbo.out") for filename in HL_molecules_file_names ]
+
+    #read multwfn json files
+    multwfn_props=[]
+    for pmn in HL_molecules_file_names:
+        with open(pmn[:-4]+".multwfn.json","r") as f: l=f.read()
+        multwfn_props.append(json.loads(l))
+
+    reference_molecule=copy.deepcopy(ref_molecule)
+    reference_molecule.remove_atoms("h")
+    reference_groups_of_equivalent_atoms, reference_connections_between_groups, reference_graph=equivalent_atoms_from_molecule(reference_molecule)
+
+    for pm,m,pmp,pNBOchgs,pNBOnbibo,pNBOwibergbo,NBO_NLMO_NPA_bo in zip(molecules_HL,molecules,multwfn_props,NBO_charges,NBO_nbi_bond_orders,NBO_wiberg_bond_orders,NBO_NLMO_NPA_bond_orders):
+        np.set_printoptions(precision=2,linewidth=400)
+        #add properties: force constants, nbo charges, nbi bond orders and wiberg bond orders to atoms
+        m.read_hess()
+
+        pmp["isC"]=[float("c"==a.symbol.lower()) for a in m.atom_list]    #expressed as float instead of bool so it can be operated
+        pmp["isN"]=[float("n"==a.symbol.lower()) for a in m.atom_list]
+        pmp["isO"]=[float("o"==a.symbol.lower()) for a in m.atom_list]
+        pmp["isS"]=[float("s"==a.symbol.lower()) for a in m.atom_list]
+
+        #pmp["force_constants"]=np.sum(get_force_constant_matrix(m),axis=0)
+        pmp["force_constants"]=get_force_constant_matrix(m)
+        pmp["rel_force_constants"]=get_force_constant_matrix(m,relative=True)
+        pmp["inv_distances"]=m.inv_distance_matrix()
+        pmp["distances"]=m.distance_matrix()
+        pmp["rel_distances"]=m.distance_matrix(relative=True)
+        pmp["nbo_charges"]=pNBOchgs
+        pmp["nbo_nbi_bond_orders"]=pNBOnbibo
+        pmp["nbo_wiberg_bond_orders"]=pNBOwibergbo    
+        pmp["nbo_nlmonpa_bond_orders"]= NBO_NLMO_NPA_bo  
+        pmp["chemical_isotropic_shield"]=get_chemical_shifts(pm,relative=False) 
+        pmp["rel_chemical_isotropic_shield"]=get_chemical_shifts(pm,relative=True)
+        for k in ['chg_hirshfeld', 'chg_voronoy', 'chg_mulliken', 'chg_lowdin', 'chg_becke', 'chg_ADCH',
+                  'chg_CHELPG', 'chg_MK', 'chg_CM5', 'chg_12CM5', 'chg_RESP', 'chg_PEOE', 'bo_mayer', 
+                  'bo_wiberg', 'bo_mulliken', 'bo_fuzzy', 'bo_laplacian', 'bo_IBSI','v_at_nucleus','nbo_charges']:   
+            pmp["rel_"+k]=get_relative_chg(pmp[k],pm,chg=k)
+
+        #pmp["molecular_dipole_projected_on_bonds"] and pmp["polarizability_wr2_bonds_projected_on_bonds"] are matrices (number of atoms x number of atoms)
+        #pmp["polarizability_wr2_bonds_with_H_projected_on_bonds"] is a tensor (number of atoms x number of atoms x number of atoms)
+        pmp["molecular_dipole_projected_on_bonds"],pmp["polarizability_wr2_bonds_projected_on_bonds"], pmp["polarizability_wr2_bonds_with_H_projected_on_bonds"],pmp["e_spatial_extent_projected_on_bonds"],pmp["tot_spatial_extent_projected_on_bonds"]       =get_projected_molecular_dipole(pm)
+        pmp["number_of_H"]=[0.0]*len(m.atom_list) #number of H atoms bound to each atom; initialized as 0.0 
+
+        #properties that will not be included:
+        exclude_keys=["FASA_mol_electronic_spatial_extent_components","FASA_molecular_dipole_moment","FASA_atomic_dipole_moments",
+                      "FASA_atomic_dipole_moments_contributions","FASA_Components_of_<r^2>"]    
+        for k in exclude_keys: del(pmp[k])
+        
+        #scalar vector and tensor properties will be treated differently, so lets find out which property is scalar and which is vectorial
+        atom_scalar_properties=[p for p in pmp.keys() if (type(pmp[p]) in [list,np.ndarray]) 
+                                                         and (type(pmp[p][0]) in  [float,np.float32,np.float64]) and p not in exclude_keys]  
+        
+        atom_vector_properties=[p for p in pmp.keys() if (type(pmp[p]) in [list,np.ndarray]) and (type(pmp[p][0]) in  [list,np.ndarray])  
+                                                         and (type(pmp[p][0][0]) in [float,np.float32,np.float64])  and p not in exclude_keys]
+        
+        atom_tensor_properties=[p for p in pmp.keys() if (type(pmp[p]) in [list,np.ndarray]) and (type(pmp[p][0]) in  [list,np.ndarray]) 
+                                                         and (type(pmp[p][0][0]) in  [list,np.ndarray]) and p not in exclude_keys]
+                                
+
+        to_remove=[]
+        for k in pmp.keys():
+            if k not in atom_scalar_properties and k not in atom_vector_properties and k not in atom_tensor_properties: to_remove.append(k)
+        for k in to_remove: del(pmp[k])
+            
+        #delete diagonal elements of vector properties (bond order of an atom with itself must be 0)
+        for k in atom_vector_properties:
+            for i in range(len(pmp[k])): pmp[k][i][i]=0.0
+        
+        #delete diagonal elements of tensor properties (maybe it is not needed)
+        for k in atom_tensor_properties:
+            for i in range(len(pmp[k])):
+                for j in range(len(pmp[k][i])): pmp[k][j][i][i]=0.0
+        
+
+
+        #add properties of H atoms to the nearest non-H atom 
+        #create the properties:
+        for k in atom_scalar_properties: pmp[k+"_H"]=[0.0]*len(pm.atom_list)   
+        for k in atom_vector_properties: pmp[k+"_H"]=[[0.0]*len(pm.atom_list)]*len(pm.atom_list)
+        #for the polarizability wr2 XH bonds, all matrices for H atoms are 0, so this is not doing anything; uncomment for other cases...
+        #for k in atom_tensor_properties: pmp[k+"_H"]=[[[0.0]*len(pm.atom_list)]*len(pm.atom_list)]*len(pm.atom_list)
+            
+        for a in pm.atom_list:
+            if a.symbol.lower()=="h":
+                nearest=pm.nearest_atom(a,exclude_H=True)
+                nearest_index=nearest.atom_number-1
+                a_index=a.atom_number-1
+                for k in atom_scalar_properties:
+                    pmp[k+"_H"][nearest_index]+=pmp[k][a_index]
+                for k in atom_vector_properties:
+                    pmp[k+"_H"][nearest_index]+=np.array(pmp[k][a_index])
+                #for the polarizability wr2 XH bonds, all matrices for H atoms are 0, so this is not doing anything but adding zeros; uncomment for other cases...
+                #for k in atom_tensor_properties:
+                #    pmp[k+"_H"][nearest_index]+=np.array(pmp[k][a_index])
+                pmp["number_of_H"][nearest_index]+=1
+
+
+        #update scalar, vector and tensor properties lists to include also "_H" properties
+        atom_scalar_properties=[p for p in pmp.keys() if (type(pmp[p]) in [list,np.ndarray]) 
+                                                         and (type(pmp[p][0]) in  [float,np.float32,np.float64]) and p not in exclude_keys ]#and p not in ["isC","isN","isO","isS"]] 
+         
+        atom_vector_properties=[p for p in pmp.keys() if (type(pmp[p]) in [list,np.ndarray]) and (type(pmp[p][0]) in  [list,np.ndarray])  
+                                                         and (type(pmp[p][0][0]) in [float,np.float32,np.float64])  and p not in exclude_keys]
+        
+        atom_tensor_properties=[p for p in pmp.keys() if (type(pmp[p]) in [list,np.ndarray]) and (type(pmp[p][0]) in  [list,np.ndarray]) 
+                                                         and (type(pmp[p][0][0]) in  [list,np.ndarray]) and p not in exclude_keys]
+
+
+
+        #remove H atoms:
+        h_numbers=[i for i in range(len(pm.atom_list)) if pm.atom_list[i].symbol.lower()=="h"]
+        no_h_numbers=[i for i in range(len(pm.atom_list)) if pm.atom_list[i].symbol.lower()!="h"]
+
+        #remove properties of H atoms, including rows corresponding of h atoms in vector properties and whole matrices of tensor properties
+        for k in atom_scalar_properties+atom_vector_properties+atom_tensor_properties:
+            new_pmp=[pmp[k][i] for i in range(len(pm.atom_list)) if i not in h_numbers]
+            pmp[k]=new_pmp
+
+        #remove columns corresponding to h atoms in atom_vector_properties and rows corresponding to tensor properties:
+        for k in atom_vector_properties:
+            new_pmp=[]
+            for p in pmp[k]:
+                new_pmp_vector=[p[i] for i in range(len(pm.atom_list)) if i not in h_numbers]
+                new_pmp.append(new_pmp_vector)
+            pmp[k]=new_pmp
+        
+        #remove rows and colums of tensor properties:
+        for k in atom_tensor_properties:
+            new_pmp_tensor=[]
+            for p in pmp[k]:
+                new_pmp_matrix=np.zeros((len(no_h_numbers),len(no_h_numbers)))
+                for i,a in enumerate(no_h_numbers):
+                    for j,b in enumerate(no_h_numbers):
+                        new_pmp_matrix[i,j]=p[a][b]
+                new_pmp_tensor.append(new_pmp_matrix)
+            pmp[k]=np.array(new_pmp_tensor)
+
+        #for aaa in pmp['polarizability_wr2_bonds_with_H_projected_on_bonds']: print ("··l698···");print(np.array(aaa));print("////") #borrame
+
+        #remove H atoms from the molecule object
+        pm.remove_atoms("h")
+        
+
+        #get the groups of equivalent atoms, their connections, and a graph with equivalent atoms removed (that will be used for overlapping and maping atom numbers) 
+        groups_of_equivalent_atoms, connections_between_groups, G=equivalent_atoms_from_molecule(pm)
+        #use vf2pp_isomorphism aglrithm in networkx to find a map of each molecular structure graph to the reference molecule 
+        #(a posible choice of the reference molecule is the first protonated molecule (the same must be used for protonated and deprotonated!!!!)
+        #this map will be used to renumber the atoms in a consistent way.
+        map=nx.vf2pp_isomorphism(reference_graph,G,node_label="fingerprint") 
+        map=dict(sorted(map.items()))
+        #print ("map after sorting"+str(map))
+        #print ("group of eq. atoms"+str(groups_of_equivalent_atoms))
+
+
+        #add the properties of equivalent atoms, depending if they correspond to scalar, vector or tensor properties
+        symmetry_method="sum"
+        #scalar:
+        for key in atom_scalar_properties:
+            new_pmp_value=[]
+            for eq_atoms in groups_of_equivalent_atoms:                                         
+                if symmetry_method=="sum" and key not in ["isC","isN","isO","isS"]:
+                    new_pmp_value.append(float(np.sum ( [ pmp[key][eqa-1] for eqa in eq_atoms  ]))) # -1 because eqa starts at 1, not 0 
+                if symmetry_method=="mean" or key in ["isC","isN","isO","isS"]:
+                    new_pmp_value.append(float(np.mean( [ pmp[key][eqa-1] for eqa in eq_atoms  ])))
+            pmp[key]=new_pmp_value
+
+        #vector
+        #sum columns
+        for key in atom_vector_properties:
+            new_p=[]
+            for p in pmp[key]:
+                new_p_vector=[]
+                for eq_atoms in groups_of_equivalent_atoms:
+                    if symmetry_method=="sum":      new_p_vector.append(float(np.sum( [ p[eqa-1] for eqa in eq_atoms  ])))
+                    elif symmetry_method=="mean":   new_p_vector.append(float(np.mean([ p[eqa-1] for eqa in eq_atoms  ])))
+                new_p.append(new_p_vector)
+            pmp[key]=new_p
+
+        #sum rows
+        for key in atom_vector_properties:
+            new_p=[]
+            for eq_atoms in groups_of_equivalent_atoms:
+                new_row=np.zeros_like(pmp[key][0])
+                for eqa in eq_atoms:
+                    new_row=np.array(pmp[key][eqa-1]   )   #=+???
+                    #if symmetry_method=="mean":new_row=[nr/len(eq_atoms)for nr in new_row]
+                new_p.append(new_row)
+            pmp[key]=new_p
+        
+        #tensor properties
+        
+        atom_tensor_properties=['polarizability_wr2_bonds_with_H_projected_on_bonds'] #borrame
+        for key in atom_tensor_properties:
+            new_p=[]
+            for eq_atoms in groups_of_equivalent_atoms:
+                #calculate average over matrices:
+                #each of these matrices represente the response to an electric field applied on the direction of each X-H bond projected over the bonds in the molecule
+                #the matrix with most relevant information is the one that correspond to the electric field applied in the direction of the X-H bond that is broken during 
+                #deprotonation. It will be recovered by multiplying with the "mask" (0 for all atoms except for the atom X bound to the H that is cleaved, when it is 1)
+                #Therefore, in those cases in which there are several symmetry equivalent X-H atoms, it seems more reasonable to calculate the mean and not the sum.
+                new_matrix=np.zeros_like(pmp[key][0])
+                for eqa in eq_atoms:
+                    new_matrix+=pmp[key][eqa-1]
+                #instead of the sum, this uses the average so when the value is recovered applying the mask, integers and not fractinal numbers are used
+                new_p.append(new_matrix/float(len(eq_atoms))) 
+               
+            #sum rows of matrices; this is consistent with the treatment to atom vector properties (sum in one dimmension and deleting redundant info in the other)
+            new_pp=[]
+            for m in new_p:
+                new_ppp=[] 
+                for eq_atoms in groups_of_equivalent_atoms:
+                    new_row=np.zeros_like(m[0])
+                    for eqa in eq_atoms:
+                        new_row+=m[eqa-1]
+                    new_ppp.append(new_row)
+                new_pp.append(np.array(new_ppp))
+                    
+            #eliminate columns of matrices
+            new_ppp=[]
+            for m in new_pp:
+                new_pppp=np.zeros((len(groups_of_equivalent_atoms),len(groups_of_equivalent_atoms)))
+                for i in range(len(m)):
+                    for j,eqa in enumerate(groups_of_equivalent_atoms):
+                        new_pppp[i,j]=m[i,eqa[0]-1]
+                new_ppp.append(new_pppp)
+            
+            pmp[key]=np.array(new_ppp)
+
+
+        #for aaa in pmp['polarizability_wr2_bonds_with_H_projected_on_bonds']: print ("··l792···");print(np.array(aaa));print("####") #borrame
+    
+            
+
+        
+        #sort the list elements according to map so all list are equally ordered 
+        for key in atom_scalar_properties:
+            pmp_sort=np.zeros_like(pmp[key])
+            for k,v in map.items(): pmp_sort[k]=pmp[key][v]
+            pmp[key]=list(pmp_sort)
+        for key in atom_vector_properties:
+            pmp_sort_col=np.zeros_like(pmp[key])
+            for k,v in map.items(): pmp_sort_col[k,:]=np.array(pmp[key])[v,:]
+            pmp_sort_rows=np.zeros_like(pmp_sort_col)
+            for k,v in map.items(): pmp_sort_rows[:,k]=pmp_sort_col[:,v]
+            pmp[key]=pmp_sort_rows.tolist()
+
+
+        #remove empty properties
+        properties_to_remove=[k for k in pmp.keys() if k.startswith("rel_") and not k.endswith("_H")]
+        for k in properties_to_remove: del(pmp[k])
+
+        props.append(pmp)
+        
+    return props,nx.adjacency_matrix(reference_graph).todense()    
+
+
+#flag to determine wether to save or not the lists of scalar and vector propertie's names
+write_keys_list=True
+#lists of the scalar and vector properties' names
+atom_prop_scalar_keys,atom_prop_vector_keys=[],[]
+#to know how much is done
+counter=0
+
+
+#to read from command line on which entries the script must work
+if not any([":" in s for s in sys.argv]): rows=labels.index
+else:
+        arg_index=[":" in s for s in sys.argv].index(True) 
+        if sys.argv[arg_index].startswith(":"): start=0;end=sys.argv[arg_index].split(":")[1]
+        elif sys.argv[arg_index].endswith(":"): end=len(labels.index)+1; start=sys.argv[arg_index].split(":")[0]
+        else: start,end=sys.argv[arg_index].split(":")[0],sys.argv[arg_index].split(":")[1]
+        rows=labels.index[int(start):int(end)]
+        print (start)
+        print (end)
+
+
+
+for compn in rows:
+    counter+=1
+    if compn in already_done:continue 
+
+    #get the suffixes of the protonated and deprotonated files
+    if str(compn.split("_")[1]).startswith("cation"):   protonated_str="-cation";  deprotonated_str="-neut"
+    if str(compn.split("_")[1]).startswith("2cation"):  protonated_str="-2cation"; deprotonated_str="-cation"
+    if str(compn.split("_")[1]).startswith("3cation"):  protonated_str="-3cation"; deprotonated_str="-2cation"
+    if str(compn.split("_")[1]).startswith("4cation"):  protonated_str="-4cation"; deprotonated_str="-3cation"
+    if str(compn.split("_")[1]).startswith("5cation"):  protonated_str="-5cation"; deprotonated_str="-4cation"
+    if str(compn.split("_")[1]).startswith("6cation"):  protonated_str="-6cation"; deprotonated_str="-5cation"
+    if str(compn.split("_")[1]).startswith("neut"):     protonated_str="-neut";    deprotonated_str="-an"
+    if str(compn.split("_")[1]).startswith("an"):       protonated_str="-an";      deprotonated_str="-2an"
+    if str(compn.split("_")[1]).startswith("2an"):      protonated_str="-2an";     deprotonated_str="-3an"
+    if str(compn.split("_")[1]).startswith("3an"):      protonated_str="-3an";     deprotonated_str="-4an"
+    if str(compn.split("_")[1]).startswith("4an"):      protonated_str="-4an";     deprotonated_str="-5an"
+    if str(compn.split("_")[1]).startswith("5an"):      protonated_str="-5an";     deprotonated_str="-6an"
+    protonated_molecules_file_names,protonated_HL_molecules_file_names=[],[]
+    deprotonated_molecules_file_names,deprotonated_HL_molecules_file_names=[],[]
+
+    #get name of files
+    for route in routes:
+        for f in  [  ff for ff in os.listdir(route) if (("hess" not in ff) and ("chrg" not in ff) and ("m06" not in ff) and ("fake" not in ff) and ("cpcm" not in ff) and "_nbo" not in ff)]:
+            if f.startswith( str(compn).split("_")[0]+protonated_str): 
+                protonated_molecules_file_names.append(route+f)
+                protonated_HL_molecules_file_names.append(HL_route+f.split(".out")[0]+HL_text+".out")
+            if f.startswith( str(compn).split("_")[0]+deprotonated_str): 
+                deprotonated_molecules_file_names.append(route+f)
+                deprotonated_HL_molecules_file_names.append(HL_route+f.split(".out")[0]+HL_text+".out")
+
+    #print what we are doing
+    print (" "*80,end="\n")
+    print (str(counter)+"/"+str(len(rows))+"  loading "+str(len(protonated_molecules_file_names))+" protonated molecules and "+str(len(deprotonated_molecules_file_names))+"deprotonated molecules for:"+ str(compn)+"                                            ", end="\n")
+
+    #additional property that will be read from HL molecules: polarizability matrix
+    extra_props=[Molecular_structure.Property(name="polarizability_matrix",
+                             text_before="The raw cartesian tensor (atomic units):",
+                             text_after="diagonalized tensor:",format="float"),
+                 Molecular_structure.Property(name="quadrupole_moment", 
+                             text_before="                XX           YY           ZZ           XY           XZ           YZ",
+                             text_after="(a.u.)")
+                             ]
+
+    #get list of Molecular_structure objects for HL and geometry optimization and for protonated and deprotonated
+    protonated_molecules=[Molecular_structure.Molecular_structure(f,"last") for f in protonated_molecules_file_names]
+    protonated_molecules_HL=[Molecular_structure.Molecular_structure(f,"last",extra_props) for f in protonated_HL_molecules_file_names]
+    deprotonated_molecules=[Molecular_structure.Molecular_structure(f,"last") for f in deprotonated_molecules_file_names]
+    deprotonated_molecules_HL=[Molecular_structure.Molecular_structure(f,"last",extra_props) for f in deprotonated_HL_molecules_file_names]
+
+    #this is important: we do not want weak interactions in the adjancency matrix:
+    for m in protonated_molecules_HL+deprotonated_molecules_HL: m.remove_non_covalent_connections()
+
+
+    #read the number of equivalent structures from the annotated_atoms.py file (used for calculating populations)
+    protonated_identical_molecules=[get_n_identical_structures(filename) for filename in protonated_molecules_file_names]
+    deprotonated_identical_molecules=[get_n_identical_structures(filename) for filename in deprotonated_molecules_file_names]
+
+    #calculate energies for MB populations and populations
+    protonated_gibbs_free_energies_optz=   np.array([m.gibbs_free_energy for m in protonated_molecules])             * hartrees_to_kal_mol
+    protonated_zero_point_energies_optz=   np.array([m.zero_point_energy for m in protonated_molecules])             * hartrees_to_kal_mol
+    protonated_sp_energies_optz=           np.array([m.electronic_energy for m in protonated_molecules])             * hartrees_to_kal_mol
+    protonated_sp_energies=                np.array([m.electronic_energy for m in protonated_molecules_HL])          * hartrees_to_kal_mol
+    protonated_gibbs_free_energies=        protonated_gibbs_free_energies_optz-protonated_sp_energies_optz+protonated_sp_energies
+    protonated_zero_point_energies=        protonated_zero_point_energies_optz-protonated_sp_energies_optz+protonated_sp_energies
+    deprotonated_gibbs_free_energies_optz=   np.array([m.gibbs_free_energy for m in deprotonated_molecules])             * hartrees_to_kal_mol
+    deprotonated_zero_point_energies_optz=   np.array([m.zero_point_energy for m in deprotonated_molecules])             * hartrees_to_kal_mol
+    deprotonated_sp_energies_optz=           np.array([m.electronic_energy for m in deprotonated_molecules])             * hartrees_to_kal_mol
+    deprotonated_sp_energies=                np.array([m.electronic_energy for m in deprotonated_molecules_HL])          * hartrees_to_kal_mol
+    deprotonated_gibbs_free_energies=        deprotonated_gibbs_free_energies_optz-deprotonated_sp_energies_optz+deprotonated_sp_energies
+    deprotonated_zero_point_energies=        deprotonated_zero_point_energies_optz-deprotonated_sp_energies_optz+deprotonated_sp_energies
+    #to prevent overflow, use relative values:
+    protonated_gibbs_free_energies=protonated_gibbs_free_energies-np.min(protonated_gibbs_free_energies)
+    protonated_zero_point_energies=protonated_zero_point_energies-np.min(protonated_zero_point_energies)
+    protonated_sp_energies=protonated_sp_energies-np.min(protonated_sp_energies)
+    deprotonated_gibbs_free_energies=deprotonated_gibbs_free_energies-np.min(deprotonated_gibbs_free_energies)
+    deprotonated_zero_point_energies=deprotonated_zero_point_energies-np.min(deprotonated_zero_point_energies)
+    deprotonated_sp_energies=deprotonated_sp_energies-np.min(deprotonated_sp_energies)
+    if   weighting=="gibbs":
+        protonated_molecules_populations= np.exp( -protonated_gibbs_free_energies/RT )*(protonated_identical_molecules)
+        deprotonated_molecules_populations= np.exp( -deprotonated_gibbs_free_energies/RT )*(deprotonated_identical_molecules)            
+    elif weighting=="zero":
+        protonated_molecules_populations= np.exp( -protonated_zero_point_energies/RT )*(protonated_identical_molecules)
+        deprotonated_molecules_populations= np.exp( -deprotonated_zero_point_energies/RT )*(deprotonated_identical_molecules)
+    elif weighting=="sp":
+        protonated_molecules_populations= np.exp( -protonated_sp_energies/RT )*(protonated_identical_molecules)
+        deprotonated_molecules_populations= np.exp( -deprotonated_sp_energies/RT )*(deprotonated_identical_molecules)
+    sum_protonated_molecules_populations=np.sum(protonated_molecules_populations)
+    protonated_molecules_populations= protonated_molecules_populations / sum_protonated_molecules_populations 
+    sum_deprotonated_molecules_populations=np.sum(deprotonated_molecules_populations)
+    deprotonated_molecules_populations= deprotonated_molecules_populations / sum_deprotonated_molecules_populations 
+
+
+
+
+
+    # for protonated molecules:
+    pmp,adj_matrix=get_lists_of_properties_for_symmetry_reduced_graph(protonated_molecules_HL,protonated_molecules,protonated_HL_molecules_file_names,protonated_molecules_HL[0])
+    #for deprotonated_molecules: (note that reference molecule is the protonated, not the deprotonated, because it must be the same in both calls)
+    dmp,_=get_lists_of_properties_for_symmetry_reduced_graph(deprotonated_molecules_HL,deprotonated_molecules,deprotonated_HL_molecules_file_names,protonated_molecules_HL[0])
+
+    #Maxwell-Boltzmann average properties of each atom and difference between protonated and deprotonated 
+    #returns a list (one ELEMENT for each atom) of dictionaries with the properties
+    averaged_props=[]
+
+    #build all tautomer pairs involving one protonated and one deprotonated structure, calculate their population, keep only those contributing to 99% of population
+    #and group them according to the atom that loose the proton (using the difference in the number_of_H between protonated and deprotonated)
+    pairs=[]  
+    for p_tautomer in range(0,len(protonated_molecules_HL)):
+        for d_tautomer in range(0,len(deprotonated_molecules_HL)):
+            tautomer_population=protonated_molecules_populations[p_tautomer]*deprotonated_molecules_populations[d_tautomer]
+            tautomer_H_position=[numb_h_prot-numb_h_deprot for numb_h_prot,numb_h_deprot in  zip(pmp[p_tautomer]["number_of_H"],dmp[d_tautomer]["number_of_H"])]
+            pairs.append([p_tautomer,d_tautomer,tautomer_population,tautomer_H_position])
+            #sort pairs according to their "population"(=contribution) and get rid off those whose contribution aggregates 1% 
+    pairs_sorted=sorted(pairs, key=lambda x: x[2],reverse=True)
+    pairs_valid=[pairs_sorted[0]]; sum=pairs_sorted[0][2]; p=0
+    while sum<0.99:
+        p+=1
+        pairs_valid.append(pairs_sorted[p])
+        sum+=pairs_sorted[p][2]
+    #group surviving pairs according to "tautomer_H_position": all groups with the same "tautomer_H_position" vector are "conformers"
+    #and their properties can be aggregated separately without loss of information since all atoms have the same "role" (alpha, beta, etc atom with respect to the position of deprotonateion, etc)            
+    groups_of_tautomer_pairs=[]
+    while (len(pairs_valid))>0:
+        #initialize current group with the first pair in pairs_valid
+        group=[pairs_valid[0]]
+        delete_indexes=[0]
+        for i in range(1,len(pairs_valid)):
+            #append all pairs with the same "tautomer_H_position"
+            if group[0][-1]==pairs_valid[i][-1]: group+=[pairs_valid[i]];delete_indexes.append(i)
+        #delete pairs already added to a group (so the first element of pairs_valid can be used to start a new group in the next cycle of the "while" bucle)
+        pairs_valid=[p for i,p in enumerate(pairs_valid) if i not in delete_indexes]
+        #store current group in the groups of tautomers
+        groups_of_tautomer_pairs.append(group)
+
+
+
+    #list of properties dictionaries, each is the weighted average property of each group of pairs
+    prop_tautomers_groups=[]
+    for group_of_tautomer_pair in groups_of_tautomer_pairs:
+
+        prop_group_tautomer_pair={}
+
+        #note that this transformation may lead to the same masks from different "H_change" vectors. For example, for 123triazole_cation->neut, there are two groups:
+        # cation2->neut2  with 0,-1,2 -the 2 is created by joining 2 atoms by symmetry- and cation2->neut with 0,0,1. In both cases the mask will be 0,0,1 (this is what one wants to 
+        # project the properties of alpha atom), so it is good that this change is not made before so both possibilities are in two different groups
+        H_change=[1.0 if i>0 else 0.0 for i in group_of_tautomer_pair[0][-1]]
+        sum_H_change=np.sum(H_change)
+        prop_group_tautomer_pair["number_of_H_difference"]=[i/sum_H_change for i in H_change]
+        group_of_tautomer_pair[0][-1]=[i/sum_H_change for i in H_change] #new??
+
+        #initialize values:
+        for k in pmp[0].keys():
+            if k!="number_of_H":
+                prop_group_tautomer_pair[k+"_protonated"],prop_group_tautomer_pair[k+"_deprotonated"],prop_group_tautomer_pair[k+"_difference"]=np.zeros_like(pmp[0][k]),np.zeros_like(pmp[0][k]),np.zeros_like(pmp[0][k])                   
+        
+        #assign values, weighting with the contribution of the tautomer pair
+        #currently, the only tensor property that is processed is this; automatize this?
+        tensor_properties=['polarizability_wr2_bonds_with_H_projected_on_bonds']#,'polarizability_wr2_bonds_with_H_projected_on_bonds_H']
+        for k in pmp[0].keys():
+            if k!="number_of_H" and k not in tensor_properties:
+                for tautomer_pair in group_of_tautomer_pair:
+                    #tautomer_pair[2] is the contribution, and it is used to weight the node (atomic) features:
+                    if  type(pmp[0][k][0]) in [float,np.float32,np.float64]: w_f=tautomer_pair[2]
+                    #edge features are not weighted (the weight_matrix can be used to extract features than require weighting):
+                    elif (type(pmp[0][k][0]) in [list,np.ndarray]) and (type(pmp[0][k][0][0]) in [float,np.float32,np.float64]):   w_f=1.0          
+                    
+                    prop_group_tautomer_pair[k+"_protonated"]+=w_f*np.array(pmp[tautomer_pair[0]][k])    #tautomer_pair[2] is the contribution; tautomer_pair[0] is the property of the protonated
+                    prop_group_tautomer_pair[k+"_deprotonated"]+=w_f*np.array(dmp[tautomer_pair[1]][k])
+                    prop_group_tautomer_pair[k+"_difference"]+=w_f*(    np.array(pmp[tautomer_pair[0]][k])-np.array(dmp[tautomer_pair[1]][k])   )
+
+            elif k in tensor_properties:
+                for tautomer_pair in group_of_tautomer_pair:
+                    #prop_group_tautomer_pair[k+"_protonated"]= np.array().dot (  pmp[tautomer_pair[0]][k] )
+                    prop_group_tautomer_pair[k+"_protonated"]=np.zeros_like(pmp[tautomer_pair[0]][k][0])
+                    prop_group_tautomer_pair[k+"_deprotonated"]=np.zeros_like(dmp[tautomer_pair[1]][k][0])  #note: this should be zero if the deprotonated form has no more H atoms
+                    #use the "mask" to reduce the first tensor dimension; a matrix will be obtained
+                    for w,m in zip(tautomer_pair[-1],pmp[tautomer_pair[0]][k]): prop_group_tautomer_pair[k+"_protonated"]+=w*m
+                    for w,m in zip(tautomer_pair[-1],dmp[tautomer_pair[1]][k]): prop_group_tautomer_pair[k+"_deprotonated"]+=w*m
+                    prop_group_tautomer_pair[k+"_difference"]=prop_group_tautomer_pair[k+"_protonated"]-prop_group_tautomer_pair[k+"_deprotonated"]
+
+
+        
+        prop_tautomers_groups.append(prop_group_tautomer_pair)
+    """
+    for p in prop_tautomers_groups:
+        #print (p.keys()) #borrame
+        print ("protonatedl")
+        print (p['polarizability_wr2_bonds_with_H_projected_on_bonds_protonated']);
+        print ("deprotonatedl")
+        print (p['polarizability_wr2_bonds_with_H_projected_on_bonds_deprotonated']);
+        print ("difference")
+        print (p['polarizability_wr2_bonds_with_H_projected_on_bonds_difference']);
+        print ("polarizability_wr2_bonds_with_H_projected_on_bonds_H_protonated")
+        print (p["polarizability_wr2_bonds_with_H_projected_on_bonds_H_protonated"])
+    """
+
+    #build the disjoint equilibrium graph from the properties of each group of tautomers
+    number_of_subgraphs=len(prop_tautomers_groups)
+    number_of_atoms=adj_matrix.shape[0]
+    
+    G={}
+    G["name"]=compn
+    G["y"]=compn
+    #adjacency matrix is a block-diagonal repetition of the subgraphs adjacency matrices (that turn out to be identical)
+    G["a"]=np.kron(np.eye(number_of_subgraphs),adj_matrix)  #https://stackoverflow.com/questions/33508322/create-block-diagonal-numpy-array-from-a-given-numpy-array
+
+
+    #these atomic features were extracted but are useless, so they are deleted 
+    #in an ideal world they should not even been extracted, but this is simpler, and also in an ideal world Kamala won, so...
+    delete_features=[ "lea_atom_overall_surf_area_protonated", "lea_atom_overall_surf_area_deprotonated", "lea_atom_overall_surf_area_difference",# it is the same that was calculated for ESP 
+                        "lea_atom_pos_surf_area_protonated", "lea_atom_pos_surf_area_deprotonated", "lea_atom_pos_surf_area_difference",# it is zero everywhere
+                        "lea_atom_neg_surf_area_protonated", "lea_atom_neg_surf_area_deprotonated", "lea_atom_neg_surf_area_difference",# it is the same that overall surf area calculated for ESP
+                        "lea_atom_pos_avg_protonated","lea_atom_pos_avg_deprotonated","lea_atom_pos_avg_difference",
+                        "lea_atom_neg_avg_protonated","lea_atom_neg_avg_deprotonated","lea_atom_neg_avg_difference",
+                        #"lea_atom_neg_variance_protonated","lea_atom_neg_variance_deprotonated","lea_atom_neg_variance_difference",
+                        "lea_atom_overall_variance_protonated", "lea_atom_overall_variance_deprotonated", "lea_atom_overall_variance_difference", #this should includ: "lea_atom_neg_variance" instead of , “lea_atom_overall_variance”, but a bug makes multwfn plot NaN in lea_atom_overall_variance, 
+                        "lea_atom_pos_variance_protonated", "lea_atom_pos_variance_deprotonated", "lea_atom_pos_variance_difference",#so the information is taken from lea_atom_neg_variance instead and attributed to "atom-var-LEA"
+                        "number_of_H_H_protonated", "number_of_H_H_deprotonated", "number_of_H_H_difference",   #the same that number_of_H
+                        "lea_atom_overall_surf_area_H_protonated", "lea_atom_overall_surf_area_H_deprotonated", "lea_atom_overall_surf_area_H_difference",
+                        "lea_atom_pos_surf_area_H_protonated", "lea_atom_pos_surf_area_H_deprotonated", "lea_atom_pos_surf_area_H_difference",
+                        "lea_atom_neg_surf_area_H_protonated", "lea_atom_neg_surf_area_H_deprotonated", "lea_atom_neg_surf_area_H_difference",
+                        "lea_atom_overall_variance_H_protonated", "lea_atom_overall_variance_H_deprotonated", "lea_atom_overall_variance_H_difference", 
+                        "lea_atom_pos_variance_H_protonated", "lea_atom_pos_variance_H_deprotonated", "lea_atom_pos_variance_H_difference"
+                        "lea_atom_pos_avg_H_protonated","lea_atom_pos_avg_H_deprotonated","lea_atom_pos_avg_H_difference",
+                        "lea_atom_neg_avg_H_protonated","lea_atom_neg_avg_H_deprotonated","lea_atom_neg_avg_H_difference",
+                        "lea_atom_neg_variance_H_protonated","lea_atom_neg_H_variance_deprotonated","lea_atom_neg_variance_H_difference",
+                        "isC_deprotonated","isC_difference","isN_deprotonated","isN_difference","isO_deprotonated","isO_difference","isS_deprotonated","isS_difference",
+                        "isC_H_protonated","isC_H_deprotonated","isC_H_difference","isN_H_protonated","isN_H_deprotonated","isN_H_difference",
+                        "isO_H_protonated","isO_H_deprotonated","isO_H_difference","isS_H_protonated","isS_H_deprotonated","isS_H_difference",                   
+                        ]
+    for g in range(number_of_subgraphs):
+        for k in delete_features: 
+            if k in prop_tautomers_groups[g].keys(): del(prop_tautomers_groups[g][k])
+
+    #get the scalar and vector properties list: to save some space in the (huge) json file, the keys are stored in the first line and for each compn
+    #the values are listed in the same order that the keys are given (this must be taken into account to read the json file!!!!)
+    #therefore, it is important that the order in consistent along all compns!!!. 
+    #the lists of scalar and vector keys is read from the json file if it already existed when the script was run, or determined if it has not been done before.
+    reset_key_list=True # flag to determine wether the keys are going to be determined
+    if atom_prop_scalar_keys==[] or atom_prop_vector_keys==[]: # if there is not yet a list of atom or vector properties keys:
+        if graphs_extracted_file in os.listdir():  #if there is already a json file that will be continued:
+            with open (graphs_extracted_file,"r") as f: keys=json.loads(f.readlines()[0]) #read the keys
+            atom_keys_match_pub=all( [   k  in inv_atom_features_publication_names.keys() for k in keys["feature_keys"]  ]   )
+            vector_keys_match_pub=all( [   k  in inv_vector_features_publication_names.keys() for k in keys["vector_keys"]  ]   )
+            if atom_keys_match_pub and vector_keys_match_pub:
+                atom_prop_scalar_keys=[inv_atom_features_publication_names[k] for k in keys["feature_keys"]]  #translate the names of the properties in the publication to the names found here.
+                atom_prop_vector_keys=[inv_vector_features_publication_names[k] for k in keys["vector_keys"]] #translate the names of the properties in the publication to the names found here.
+                #atom_prop_scalar_keys,atom_prop_vector_keys= keys["feature_keys"],keys["vector_keys"]
+                reset_key_list=False
+        if reset_key_list:
+            write_keys_list=True
+            atom_prop_scalar_keys=[k for k in prop_tautomers_groups[0].keys() if (type(prop_tautomers_groups[0][k][0]) in [float,np.float32,np.float64])  ]
+            atom_prop_vector_keys=[k for k in prop_tautomers_groups[0].keys() if (type(prop_tautomers_groups[0][k][0]) in [list,np.ndarray])  and 
+                                                                         (type(prop_tautomers_groups[0][k][0][0]) in [float,np.float32,np.float64]) ]
+
+    #check if there is any difference in the number of properties determined and the expected list of properties 
+    current_keys= prop_tautomers_groups[0].keys()
+    if any([k not in current_keys for k in atom_prop_scalar_keys+atom_prop_vector_keys]) or  any([k not in atom_prop_scalar_keys+atom_prop_vector_keys for k in current_keys]):
+        s= "possible error: number of atomic properties determined for: "+compn+"are different than for the rest of data"
+        print (s)
+        with open("report_error.txt","a") as f: f.write(s)
+
+
+
+
+    #build the feature vectors X; usually X is number_of_atoms x number of features, but to deal with different tautomers, it will correspond to the feature vectors
+    #of a disjoint graph composed of N "subgraphs", one for each of the N tautomer combinations; each subgraph's X is number_of_atoms x number of features, and therefore
+    #the graph X is (N * number_of_atoms) x number of features
+    X=[]
+    for k in atom_prop_scalar_keys: 
+        x=[]
+        for g in range(number_of_subgraphs):
+            x+=[ prop_tautomers_groups[g][k][a].tolist() for a in range(number_of_atoms)  ]
+        X.append(x)
+    G["x"]=np.array(X)
+
+    #build the edge matrices; usually e dimensions are  number_of_atoms x number_of_atoms, but to deal with different tautomers, it will correspond to edge matrices of
+    #a disjoint graph composed of N "subgraphs" corresponding to each tautomer pair combination        
+    E_matrices=[]
+    from scipy.linalg import block_diag
+    for k in atom_prop_vector_keys:
+        e_subgraphs_matrices=[]
+        for g in range(number_of_subgraphs):
+            ee=[]
+            for a in range(number_of_atoms):  ee.append(prop_tautomers_groups[g][k][a])
+            e_subgraphs_matrices.append(ee)
+        e_for_each_key=e_subgraphs_matrices[0]
+        for e_subgraph_matrix in e_subgraphs_matrices[1:]: e_for_each_key=block_diag(e_for_each_key,e_subgraph_matrix)
+        E_matrices.append(e_for_each_key)
+        #if k=='polarizability_wr2_bonds_with_H_projected_on_bonds_difference': print (e_for_each_key)
+            
+    G["e"]=E_matrices
+
+
+
+
+
+    #write json file
+    #dictionary containing the publication name of the features (translates the script names of the features)
+    #print(atom_prop_vector_keys)#borrar
+    features_dict= {"feature_keys":[atom_features_publication_names[k] if k in atom_features_publication_names.keys() else k for k in atom_prop_scalar_keys  ] ,
+                    "vector_keys": [vector_features_publication_names[k] if k in vector_features_publication_names.keys() else k for k in atom_prop_vector_keys]}  
+    
+    #calculate the mask and the weighted_mask
+    mask=np.concatenate([ np.array(grps[0][-1]) for grps in groups_of_tautomer_pairs])
+    weighted_mask=np.concatenate([ np.sum([ g[2]  for g in grps   ])*np.array(grps[0][-1]) for grps in groups_of_tautomer_pairs])
+    #weighted_mask=np.concatenate([ grps[0][2]*np.array(grps[0][-1]) for grps in groups_of_tautomer_pairs])
+    #print ("mask"+str(mask))
+    #print ("weighted_mask"+str(weighted_mask))
+    G["mask"]=mask
+    G["weighted_mask"]=weighted_mask
+
+    """
+    u=features_dict["feature_keys"].index("number_of_H_difference")
+    G["mask"]= G["x"][u]
+    print (G["mask"])
+
+    u=features_dict["feature_keys"].index("number_of_H_weighted_difference")
+    print (u)
+    print (G["x"][u])
+    
+    u=features_dict["feature_keys"].index("isC_protonated")
+    print (G["x"][u])
+    """    
+
+    if  write_keys_list:
+        line=json.dumps(features_dict)
+        with open(graphs_extracted_file,"w") as f: f.write(line);f.write("\n")
+        write_keys_list=False
+
+
+    #generate a jasonized dictionary to write in file:
+    line= json.dumps(G,cls=NpEncoder)
+    with open(graphs_extracted_file,"a") as f: f.write(line);f.write("\n")
+    
+
+    """
+    uu=features_dict["vector_keys"].index("bo_mayer_difference")
+    print (u)
+    print (G["x"][u])
+    print (uu)
+    print (G["e"][uu])
+    print (type(G["e"][uu]))
+
+    sys.exit()
+    """
+

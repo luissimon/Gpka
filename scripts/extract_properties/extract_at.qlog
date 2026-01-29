@@ -1,0 +1,11 @@
+/home/scripts/Molecular_structure.py
+                                         pKa  ...                                           inchiKey
+compn                                         ...                                                   
+110phenanthroline_cation->neut          4.90  ...                    ['DGEZNRSVGBDHLK-UHFFFAOYSA-N']
+1133tetramethylguanidine_cation->neut  13.60  ...                    ['KYVBNYUBXIEUFW-UHFFFAOYSA-N']
+11dinitroethane_neut->an                5.21  ...  ['LKKHEZBRRGJBGH-UHFFFAOYSA-N', 'CDHZRRRSMKMOJ...
+123Nmethyltriazole_cation->neut         1.25  ...                    ['JWAWEQBUZOGIBZ-UHFFFAOYSA-N']
+123triazole_cation->neut                1.17  ...                    ['QWENRTYMTSOGBR-UHFFFAOYSA-N']
+
+[5 rows x 7 columns]
+lot must be M06, sM06, swb97xd, wb97xd, pbeh3c, wb97x3c, or r2scan3c
