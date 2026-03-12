@@ -14,7 +14,14 @@ sampl/extracted_data/*.json
 #ignore old scripts
 scripts/old
 #ignore large files
-models/*/values_extracted-gibbs-swb97xd.25_all_with_graph_data.csv
-models/NN-simple-stdscaler/values_extracted-gibbs-swb97xd.25_std_train.dataset
-models/NN-simple-stdscaler/pka_predictor_config.json
-#
+models/*/*with_graph_data.csv
+models/NN-simple-stdscaler/*.dataset
+models/NN-simple-stdscaler/*
+scripts/db_analysis/nohup.out
+scripts/db_analysis/values_extracted-gibbs-*.csv
+scripts/db_analysis/tautomer_scatter.tar
+scripts/db_analysis/db_analysis.ipynb
+scripts/db_analysis/db_analysis_1.ipynb
+scripts/db_analysis/.ipynb_checkpoints
+scripts/db_analysis/nohup.out
+

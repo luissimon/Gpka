@@ -41,7 +41,7 @@ def get_charge(file_name):
 
 def correct_xyz_file(file_name):
     with open(file_name,"r") as f: lines=f.readlines()
-    lines=[line for line in lines if line.strip()!=""]
+    lines=[line for line in lines if line.strip()!="" and len(line.split())==4]
     carts=[line.split() for line in lines]
     if len(carts[0])==4: #include number of atoms in the first line and name in the second
         new_lines=[str(len(lines))+"\n",file_name.split(".xyz")[0]+"\n"]
@@ -50,7 +50,7 @@ def correct_xyz_file(file_name):
 
 
 #prepare file for optimization
-def prepare_optimization(file_name,n_procs=14,opt_lot="PBEh-3c",orca_version=5,skip_optimization=False,reduce_step=False):
+def prepare_optimization(file_name,n_procs=14,opt_lot="PBEh-3c",orca_version=5,skip_optimization=False,reduce_step=False,convergence="verytightopt"):
     charge,_=get_charge(file_name)
     if file_name[-4:]!=".xyz": file_name+=".xyz" 
 
@@ -61,9 +61,9 @@ def prepare_optimization(file_name,n_procs=14,opt_lot="PBEh-3c",orca_version=5,s
     if opt_lot=="PBEh3c" or opt_lot=="pbeh3c": opt_orca_txt="! PBEh-3c"
     elif opt_lot=="b973c": opt_orca_txt="! B97-3c"
     else: opt_orca_txt="! "+opt_lot
-    opt_orca_txt+=' CPCM defgrid1 CHELPG verytightopt Hirshfeld \n  %cpcm smd true\n  SMDsolvent "water"  end\n  \n%geom'
+    opt_orca_txt+=' CPCM defgrid1 CHELPG '+convergence+' Hirshfeld \n  %cpcm smd true\n  SMDsolvent "water"  end\n  \n%geom'
     if reduce_step: opt_orca_txt+='\n   MaxStep 0.03\n'
-    opt_orca_txt+='\n   MaxIter 500\n   end\n'
+    opt_orca_txt+='\n   MaxIter 250\n   end\n'
     if orca_version==5:
         opt_orca_txt+='%pal nprocs '+str(n_procs)+'\nend\n%MaxCore 3906\n %freq\n Numfreq True\n Quasirrho True\n Cutofffreq 100.0\n end\n '
     elif orca_version==6:
@@ -105,7 +105,7 @@ def run_optimization(file_name, n_procs=14, orca_exe="/home/orca5/orca",scratch_
     return file_name.split(".inp")[0]+".out"
 
 
-def repeat_optimization(molecule,file_name, attempt=1, n_procs=14, orca_exe="/home/orca5/orca",scratch_home="/scratch/lsimon/",ofakeG_exe="/home/g16/g16/OfakeG",opt_lot="PBEh-3c"):
+def repeat_optimization(molecule,file_name, attempt=1, n_procs=14, orca_exe="/home/orca5/orca",scratch_home="/scratch/lsimon/",ofakeG_exe="/home/g16/g16/OfakeG",opt_lot="PBEh-3c",convergence="verytightopt"):
 
     output_text="················WARNING:·····················"
     output_text+="\nthere is at least one imaginary frequency in the optimized structure!!!"
@@ -167,7 +167,7 @@ def repeat_optimization(molecule,file_name, attempt=1, n_procs=14, orca_exe="/ho
             molecule.aply_normal_mode(normal_mode_number=8,factor=factor)
         new_xyz_file_name=file_name.split(".out")[0]+"imaginary"+str(attempt+1)+".xyz"
         molecule.print_xyz(new_xyz_file_name)
-        opt_inp_file=prepare_optimization(new_xyz_file_name,opt_lot=opt_lot,orca_version=orca_version,n_procs=n_procs,skip_optimization=False,reduce_step=True)
+        opt_inp_file=prepare_optimization(new_xyz_file_name,opt_lot=opt_lot,orca_version=orca_version,n_procs=n_procs,skip_optimization=False,reduce_step=True,convergence=convergence)
         opt_out_file=run_optimization(opt_inp_file,n_procs=n_procs,orca_exe=orca_exe,scratch_home=scratch_home,ofakeG_exe=ofakeG_exe,opt_lot=opt_lot)
 
     return opt_out_file            
@@ -361,6 +361,7 @@ if __name__ == "__main__":
     img_freq_limit=-35
     max_attempts=2
     n_procs=28
+    convergence="verytightopt"
 
     if len(sys.argv) > 2:
             i=1
@@ -388,6 +389,9 @@ if __name__ == "__main__":
                 elif sys.argv[i] in ["-img_limit"]:
                     i+=1
                     img_freq_limit= float(sys.argv[i])
+                elif sys.argv[i] in ["-convergence"]: 
+                    i+=1
+                    convergence= sys.argv[i]
                 i+=1
 
 
@@ -397,7 +401,7 @@ if __name__ == "__main__":
     correct_xyz_file(xyz_file)
     print("rm -f "+xyz_file.split(".xyz")[0]+"*imaginary*.*")
     os.system("rm -f "+xyz_file.split(".xyz")[0]+"*imaginary*.*")
-    opt_inp_file=prepare_optimization(xyz_file,opt_lot=opt_lot,orca_version=orca_version,n_procs=n_procs,skip_optimization=skip_optimization)
+    opt_inp_file=prepare_optimization(xyz_file,opt_lot=opt_lot,orca_version=orca_version,n_procs=n_procs,skip_optimization=skip_optimization,convergence=convergence)
     if skip_optimization==False:
         opt_out_file=run_optimization(opt_inp_file,n_procs=n_procs,orca_exe=orca_exe,scratch_home=scratch_home,ofakeG_exe=ofakeG_exe,opt_lot=opt_lot)
         n_attempts=0
@@ -417,7 +421,7 @@ if __name__ == "__main__":
                 break
             else:
                 if n_attempts==1: os.system("mv "+opt_out_file+" "+opt_out_file.split('.out')[0]+"imaginary"+str(n_attempts)+".out")
-                opt_out_file=repeat_optimization(m,opt_out_file, attempt=n_attempts, n_procs=n_procs, orca_exe=orca_exe,scratch_home=scratch_home,ofakeG_exe=ofakeG_exe,opt_lot=opt_lot)
+                opt_out_file=repeat_optimization(m,opt_out_file, attempt=n_attempts, n_procs=n_procs, orca_exe=orca_exe,scratch_home=scratch_home,ofakeG_exe=ofakeG_exe,opt_lot=opt_lot,convergence=convergence)
 
         if not no_img_freq_str_found: #if there are several calculations with imaginary frequencies
             molecules_names_list=[f for f in os.listdir(os.getcwd()) if f.startswith(xyz_file.split('.xyz')[0]) and "imaginary" in f and f.endswith("out") and not f.endswith("fake.out") and not f.endswith("nbo.out") ]

@@ -499,7 +499,7 @@ def analyze(file_name="pka_predictor",include_predictions=[],folder="",n_files=0
         marker={"size":4,"colorscale":'Rainbow',                                  
                 "line":{"width":1},"showscale":True,
                 } 
-        colorbar={"y":0.80,"x":0.15, "orientation":"h","tickfont":{"size":18},"thickness":18,"len":0.25}
+        colorbar={"y":0.80,"x":0.15, "orientation":"h","tickfont":{"size":32},"thickness":18,"len":0.25}
 
         if all([s==0 for s in std_list]) or color_by_charge:  #if it is specified or if all standard deviations values are 0, will color points based on the charge
             marker["color"]=charges_list
@@ -556,14 +556,14 @@ def analyze(file_name="pka_predictor",include_predictions=[],folder="",n_files=0
         fig.add_trace(go.Scatter(y=[-8.5,-9.5,18.5,19.5],x=[-9,-9,19,19],fill="toself",fillcolor='rgba(0,80,80,0.3)',line_color='rgba(255,255,255,0)',showlegend=False,hoverinfo="skip"))
         fig.add_trace(go.Scatter(y=[-8.0,-10.0,18.0,20.0],x=[-9,-9,19,19],fill="toself",fillcolor='rgba(0,80,80,0.2)',line_color='rgba(255,255,255,0)',showlegend=False,hoverinfo="skip") )
         fig.add_trace(go.Scatter(y=[-7.0,-11.0,17.0,21.0],x=[-9,-9,19,19],fill="toself",fillcolor='rgba(0,80,80,0.1)',line_color='rgba(255,255,255,0)',showlegend=False,hoverinfo="skip") )
-        fig.update_xaxes(title_text="pKa",title_font={'size': 24, 'weight': 1000},tickfont={"size":16})
-        fig.update_yaxes(title_text="pKa pred.",title_font={'size': 24, 'weight': 1000},tickfont={"size":16})
+        fig.update_xaxes(title_text="pKa",title_font={'size': 36, 'weight': 1000},tickfont={"size":32})
+        fig.update_yaxes(title_text="pKa pred.",title_font={'size': 36, 'weight': 1000},tickfont={"size":32})
         fig.update_layout(height=800,yaxis_range=[-5,16],xaxis_range=[-5,16],showlegend=False)
-        font=go.layout.annotation.Font(size=24,weight=1000)
-        fontR=go.layout.annotation.Font(size=24,weight=1000,color="red")
-        fontG=go.layout.annotation.Font(size=24,weight=1000,color="green")
-        fontB=go.layout.annotation.Font(size=24,weight=1000,color="blue")
-        fontO=go.layout.annotation.Font(size=24,weight=1000,color="orange")
+        font=go.layout.annotation.Font(size=36,weight=1000)
+        fontR=go.layout.annotation.Font(size=36,weight=1000,color="red")
+        fontG=go.layout.annotation.Font(size=36,weight=1000,color="green")
+        fontB=go.layout.annotation.Font(size=36,weight=1000,color="blue")
+        fontO=go.layout.annotation.Font(size=36,weight=1000,color="orange")
         fig.add_annotation(x=0.1,y=0.70,xref="paper", yref="paper",text= "M.U.E: ",font = font, showarrow=False )
         fig.add_annotation(x=0.3,y=0.70,xref="paper", yref="paper",text="{:.3f}".format(cv_maes[i]),font = fontR, showarrow=False )
         fig.add_annotation(x=0.1,y=0.62,xref="paper", yref="paper",text="R.M.S.E: ",font = font, showarrow=False )
@@ -571,7 +571,7 @@ def analyze(file_name="pka_predictor",include_predictions=[],folder="",n_files=0
         fig.add_annotation(x=0.1,y=0.57,xref="paper", yref="paper",text= "R\u00b2:      ",font = font, showarrow=False )
         fig.add_annotation(x=0.3,y=0.57,xref="paper", yref="paper",text= "{:.3f}".format(cv_r2s[i]),font = fontB, showarrow=False )
         fig.write_html(file_names[i]+".html")
-        fig.write_image(file_names[i]+".png", width=800, height=800,scale=4)
+        fig.write_image(file_names[i]+".png", width=1600, height=1100,scale=4)
 
         hist_data=np.array(real_data[i])-np.array(predicted_data[i])
         residuals_histogram=go.Histogram(x=hist_data,opacity=0.75,xbins={"size":0.25},showlegend=False,
@@ -826,15 +826,8 @@ if __name__=="__main__":
 
 
 
-    elif len(sys.argv)>1 and sys.argv[1]=="test":
+    elif len(sys.argv)>1 and sys.argv[1]=="test" or "plot_test":
 
-        prepare_eq_data(file_name=test_csv_file,drop_compounds=drop_compounds,
-                        test_size=0.0,correlated_groups=correlated_groups,train_suffix="",test_suffix="",all_suffix="_all.csv",
-                        standarize=standarize,save_standard_scalers_to_file="e_standard_scalers.txt",std_transformer=std_transformer)
-        prepare_graph_data(json_file=test_json_file,csv_file_name=test_csv_file,correlated_groups=correlated_groups,prepare_test_set=False,all_suffix="_all.csv",test_suffix="",train_suffix="")
-
-        test_dataset_file=test_csv_file.split("/")[-1][:-4]+"_all.dataset"
-        test_dataset=joblib.load(test_dataset_file)
 
         dirs=[d for d in os.listdir() if os.path.isdir(d)]
         dirs.sort(key=lambda x: os.path.getmtime(x))
@@ -849,45 +842,60 @@ if __name__=="__main__":
                 include_models=range(int(sys.argv[3].split("-")[0]),int(sys.argv[3].split("-")[1]))
         else: include_models=range(100)#[0,1,2,3]
 
-        models_included=[f for f in os.listdir(folder) if f.endswith(".h5.zip") if int(f.split("pka_predictor-pruned-")[1].split("-")[0]) in include_models]
+        if sys.argv[1]=="test":
+            prepare_eq_data(file_name=test_csv_file,drop_compounds=drop_compounds,
+                            test_size=0.0,correlated_groups=correlated_groups,train_suffix="",test_suffix="",all_suffix="_all.csv",
+                            standarize=standarize,save_standard_scalers_to_file="e_standard_scalers.txt",std_transformer=std_transformer)
+            prepare_graph_data(json_file=test_json_file,csv_file_name=test_csv_file,correlated_groups=correlated_groups,prepare_test_set=False,all_suffix="_all.csv",test_suffix="",train_suffix="")
 
-        model_json_file="pka_predictor_config.json"
+            test_dataset_file=test_csv_file.split("/")[-1][:-4]+"_all.dataset"
+            test_dataset=joblib.load(test_dataset_file)
 
-        #results_dict={}
-        #pka_real_dict={}
-        #predicted_dicts=[]
-        results=pd.DataFrame()
-        for m in models_included:
-            filename=folder+"/test_result"+m.split("pka_predictor-pruned-")[1].split(".h5.zip")[0]+".csv"
-            #loaded_models.append(load_model(weight_file_name=folder+"/"+m,model_json_file=model_json_file))
-            model=load_model(weight_file_name=folder+"/"+m,model_json_file=model_json_file)
-            test_loader=gpka_spektral_dataset.acbase_BatchLoader(test_dataset,batch_size=batch_size,epochs=1,shuffle=False)
-            
-            pka_real,names,pka_predicted=[],[],[]
-            for batch in test_loader:
-                inputs,target = batch
-                pka_real+=list(target)
-                names+=list(inputs[-1])
+
+
+            models_included=[f for f in os.listdir(folder) if f.endswith(".h5.zip") if int(f.split("pka_predictor-pruned-")[1].split("-")[0]) in include_models]
+
+            model_json_file="pka_predictor_config.json"
+
+            #results_dict={}
+            #pka_real_dict={}
+            #predicted_dicts=[]
+            results=pd.DataFrame()
+            for m in models_included:
+                filename=folder+"/test_result"+m.split("pka_predictor-pruned-")[1].split(".h5.zip")[0]+".csv"
+                #loaded_models.append(load_model(weight_file_name=folder+"/"+m,model_json_file=model_json_file))
+                model=load_model(weight_file_name=folder+"/"+m,model_json_file=model_json_file)
+                test_loader=gpka_spektral_dataset.acbase_BatchLoader(test_dataset,batch_size=batch_size,epochs=1,shuffle=False)
                 
-                #if dense_modules_params["pruning"] or eConv_modules_params["pruning"] or reduce_eq_features_params[0]["pruning"]:
-                #interpreter.set_tensor(input_index, inputs)
-                #interpreter.invoke()
-                #predicted_values=interpreter.get_tensor(output_index)
-                #else: predicted_values=model.predict(inputs)
-                predicted_values=model.predict(inputs)
+                pka_real,names,pka_predicted=[],[],[]
+                for batch in test_loader:
+                    inputs,target = batch
+                    pka_real+=list(target)
+                    names+=list(inputs[-1])
+                    
+                    #if dense_modules_params["pruning"] or eConv_modules_params["pruning"] or reduce_eq_features_params[0]["pruning"]:
+                    #interpreter.set_tensor(input_index, inputs)
+                    #interpreter.invoke()
+                    #predicted_values=interpreter.get_tensor(output_index)
+                    #else: predicted_values=model.predict(inputs)
+                    predicted_values=model.predict(inputs)
 
-                if isinstance(predicted_values,tuple): predicted_values=predicted_values[0]
-                pka_predicted+=list(np.ndarray.flatten(np.array(predicted_values)))
+                    if isinstance(predicted_values,tuple): predicted_values=predicted_values[0]
+                    pka_predicted+=list(np.ndarray.flatten(np.array(predicted_values)))
 
-            #fill the dictionary with values
-            if "compn" not in results.keys() and "exp. pKa" not in results.keys(): results["compn"],results["exp. pKa"]=pd.Series(names), pd.Series(pka_real) #only do this once
-            results["pKa predicted by models:"+m.split("pka_predictor-pruned-")[1].split(".h5.zip")[0]]=pd.Series([ dict(zip(names,pka_predicted))[n] for n in  results["compn"]  ]) #ensure the order using n from results["compn"]
+                #fill the dictionary with values
+                if "compn" not in results.keys() and "exp. pKa" not in results.keys(): results["compn"],results["exp. pKa"]=pd.Series(names), pd.Series(pka_real) #only do this once
+                results["pKa predicted by models:"+m.split("pka_predictor-pruned-")[1].split(".h5.zip")[0]]=pd.Series([ dict(zip(names,pka_predicted))[n] for n in  results["compn"]  ]) #ensure the order using n from results["compn"]
 
-        results["consensus"]=results.mean(numeric_only=True,axis=1)
-        results["std. dev."]=results.std(numeric_only=True,axis=1)
-        file_name=folder+"/sampl_results"+str(include_models[0])+"-"+str(include_models[-1])
-        print("save results to: ",file_name+".csv")
-        results.to_csv(file_name+".csv")
+            results["consensus"]=results.mean(numeric_only=True,axis=1)
+            results["std. dev."]=results.std(numeric_only=True,axis=1)
+            file_name=folder+"/sampl_results"+str(include_models[0])+"-"+str(include_models[-1])
+            print("save results to: ",file_name+".csv")
+            results.to_csv(file_name+".csv")
+
+        if sys.argv[1]=="plot_test":
+            file_name=folder+"/sampl_results"+str(include_models[0])+"-"+str(include_models[-1]) 
+            results=pd.read_csv(file_name+".csv")
 
         #get charges from name:
         results["protonated charge"]= pd.Series([ (["5an","4an","3an","2an","an","neut","cation","2cation","3cation","4cation","5cation"].index(n.split("->")[1])-4) for n in results["compn"] ])
@@ -897,11 +905,11 @@ if __name__=="__main__":
 
         import plotly
         import plotly.graph_objects as go
-        font=plotly.graph_objects.layout.annotation.Font(size=24,weight=1000)
-        fontR=plotly.graph_objects.layout.annotation.Font(size=24,weight=1000,color="red")
-        fontG=plotly.graph_objects.layout.annotation.Font(size=24,weight=1000,color="green")
-        fontB=plotly.graph_objects.layout.annotation.Font(size=24,weight=1000,color="blue")
-        fontO=plotly.graph_objects.layout.annotation.Font(size=24,weight=1000,color="orange")
+        font=plotly.graph_objects.layout.annotation.Font(size=34,weight=1000)
+        fontR=plotly.graph_objects.layout.annotation.Font(size=34,weight=1000,color="red")
+        fontG=plotly.graph_objects.layout.annotation.Font(size=34,weight=1000,color="green")
+        fontB=plotly.graph_objects.layout.annotation.Font(size=34,weight=1000,color="blue")
+        fontO=plotly.graph_objects.layout.annotation.Font(size=34,weight=1000,color="orange")
         fonts=[fontR,fontG,fontB,fontO]
         colors=["red","green","blue","orange"] 
 
@@ -975,7 +983,7 @@ if __name__=="__main__":
         from plotly.subplots import make_subplots
         fig1 = make_subplots( rows=1,cols=1,#specs=[  [{'rowspan': 3}, {"b":0.1}]  , [None, {}] ,[None, {}]  ],
                             #subplot_titles=["mue is:"+str(mean_unsigned_error),"residuals","errors"],
-                            subplot_titles=["model"]#,"residuals","errors"],
+                            #subplot_titles=["model"]#,"residuals","errors"],
                             #row_heights=[0.6,0.35,0.05],
                             #vertical_spacing=0.03,horizontal_spacing=0.05
                             )
@@ -992,8 +1000,8 @@ if __name__=="__main__":
 
         fig1.update_layout(height=800,yaxis_range=[0,14],xaxis_range=[0,14])
 
-        fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-        fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
+        fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 36, 'weight': 1000},tickfont={"size":32})
+        fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 36, 'weight': 1000},tickfont={"size":32})
 
         mean_absolute_errors=[np.mean(abs(predicted_pka-experimental_pka))   for predicted_pka,experimental_pka in zip(predicted_pkas,experimental_pkas)]
         neg_mean_squared_errors=[np.mean((predicted_pka-experimental_pka)**2)**0.5 for predicted_pka,experimental_pka in zip(predicted_pkas,experimental_pkas)]
@@ -1002,15 +1010,15 @@ if __name__=="__main__":
 
 
         x_position=0.55
-        fig1.add_annotation(x=x_position,y=0.4,xref="paper", yref="paper",text="  M.U.E.: ",font = font, showarrow=False )
-        fig1.add_annotation(x=x_position,y=0.33,xref="paper", yref="paper",text="  R.M.S.E.: ",font = font, showarrow=False )
-        fig1.add_annotation(x=x_position,y=0.285,xref="paper", yref="paper",text="  r\u00b2: ",font = font, showarrow=False )
+        fig1.add_annotation(x=x_position,y=0.4,xref="paper", yref="paper",text="   M.U.E.:   ",font = font, showarrow=False )
+        fig1.add_annotation(x=x_position,y=0.33,xref="paper", yref="paper",text="   R.M.S.E.:   ",font = font, showarrow=False )
+        fig1.add_annotation(x=x_position,y=0.285,xref="paper", yref="paper",text="   r\u00b2:   ",font = font, showarrow=False )
         fig1.add_annotation(x=0.1,y=0.9,xref="paper", yref="paper",text="  SAMPL6 ",font=fontR,showarrow=False)
         fig1.add_annotation(x=0.1,y=0.83,xref="paper", yref="paper",text="  SAMPL7 ",font=fontG,showarrow=False)
         fig1.add_annotation(x=0.1,y=0.76,xref="paper", yref="paper",text="  SAMPL8 ",font=fontB,showarrow=False)
         fig1.add_annotation(x=0.1,y=0.70,xref="paper", yref="paper",text="  EuroSAMPL ",font=fontO,showarrow=False)
 
-        x_positions=[0.63,0.75,0.83,0.91]
+        x_positions=[0.64,0.75,0.83,0.91]
         for mae,rmse,r2,f,x_position in zip(mean_absolute_errors,neg_mean_squared_errors,r_2_scores,fonts,x_positions):
             #x_position+=0.10
             fig1.add_annotation(x=x_position,y=0.4,xref="paper", yref="paper",text="{:.3f}".format(mae),font = f, showarrow=False )

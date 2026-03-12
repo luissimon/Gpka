@@ -401,7 +401,29 @@ class gpka_spektral_dataset(spektral.data.Dataset):
     #if the mask contains info about the "alpha" atom (for example, because it is build from the difference of H atoms bound to each
     #atom, that is different from 0 only in atoms that looses a proton after deprotonation), so the list of values for each atom
     #is transformed to a single value corresponding to the alpha atom
-    def aply_mask_to_atom_features(self,atom_feature_names,weighting=True,replace=True,suffix=""):
+    def aply_mask_to_atom_features(self,atom_feature_names,weighting="auto",replace=True,suffix=""):
+        #auxiliar method to determine which mask to use    
+        def use_mask(G,scaled_up=False):
+            if np.sum(G.mask)==1: return G.mask
+            else:
+                #calculate a new mask so that only the most populated microequilibrium are kept. for example, for mask: [0. 0. 0. 1. 0. 1. 0. 0. 0. 0.]
+                #with weighting mask: [0.     0.     0.     0.9873 0.     0.0127 0.     0.     0.     0.    ]
+                #new_mask will be: [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                #it works creating "pieces" of the mask and weighting mask corresponding to each microequillibrium and finding which microequillibrium is 
+                #most populated usint the sum of the elements of each weighting mask piece. This index is used to keep the mask piece and substitue the others
+                #with zeros
+                mask_pieces=np.array_split(G.mask,np.sum(G.mask))
+                weighted_mask_pieces=np.array_split(G.weighted_mask,np.sum(G.mask))
+                max_weight_pieces_index=np.argmax([np.sum(v) for v in weighted_mask_pieces])
+                new_mask=list(np.concatenate([mp*(int(i==max_weight_pieces_index)) for i,mp in enumerate(mask_pieces)]))
+                if scaled_up==False: return new_mask 
+                else:
+                    #since atom properties are "scaled down" by the microequilibrium population, it is neccessary to scale-up values.
+                    #luckily the scaling factor can be deduced from the weighted mask, in particular for its larger value 
+                    scale_factor=1.0/np.sum(weighted_mask_pieces[max_weight_pieces_index])
+                    return [x*scale_factor for x in new_mask]
+            #return G.mask 
+
         if type(atom_feature_names)==str: atom_feature_names=[atom_feature_names]
         if type(atom_feature_names[0])==str: 
             atom_features_masked=[]
@@ -411,28 +433,44 @@ class gpka_spektral_dataset(spektral.data.Dataset):
                     index=self.atom_feature_keys.index(f)
                     atom_features_masked.append(f)
                     for G in self.graphs:
+                        #decide which mask to use
+                        if weighting==True or weighting==False or weighting=="never" or weighting=="auto": #default behaviour, do not weight because the atom properties are already weighted
+                            mask=G.mask
+                        elif weighting=="forced": #force weighting even for atom properties. It is erroneous.
+                            mask=G.weighted_mask
+                        elif weighting=="only_most_populated_microequilibrium": #consider only the most populated microequilibrium
+                            mask=use_mask(G,scaled_up=True)
+
                         #G.x is n_nodes x n_features, GxT is n_features x n_nodes
                         GxT=G.x.transpose(1,0)
-                        if weighting: GxT_masked=np.array(GxT[index]).dot(G.weighted_mask)
-                        else: GxT_masked=np.array(GxT[index]).dot(G.mask)
+                        GxT_masked=np.array(GxT[index]).dot(mask)
                         G.z=np.append(G.z,GxT_masked)
+
                     self.equilibrium_keys.append(f+suffix)
                         
                 elif f in self.atom_vector_keys:
                     index=self.atom_vector_keys.index(f)
                     atom_vectors_masked.append(f)
                     for G in self.graphs:
+                        #decide which mask to use
+                        if weighting==True or weighting=="forced" or weighting=="auto": #default behaviour, do weight because the vector properties are not already weighted
+                            mask=G.weighted_mask
+                        elif weighting=="only_most_populated_microequilibrium": #consider only the most populated microequilibrium
+                            mask=use_mask(G,scaled_up=False) #no need to scale up because the vector properties are not weighted
+                        elif weighting==False or weighting=="never": #do not weight. It is erroneous
+                            mask=G.mask                        
+                        
                         #e is n_atoms x n_atoms x n_features, GeT is n_features x n_atoms x n_atoms
                         GeT=G.e.transpose(2,1,0)
-                        GeT_diag=np.diagonal(GeT[index])                     
-                        if weighting: Ge_masked=np.diagonal(GeT[index]).dot(G.weighted_mask)
-                        else: Ge_masked=np.diagonal(GeT[index]).dot(G.mask)
+                        GeT_diag=np.diagonal(GeT[index])
+                        Ge_masked=np.diagonal(GeT[index]).dot(np.array(mask))
                         G.z=np.append(G.z,Ge_masked)
                     self.equilibrium_keys.append(f+suffix)                        
             if replace:
                 if len(atom_features_masked)>0: self.eliminate_atom_features(atom_features_masked)
-                
                 if len(atom_vectors_masked)>0: self.eliminate_atom_vectors(atom_vectors_masked)
+
+
 
 
     #calculate the analogous of the adjacency matrix but with 1 only in atoms separated n bonds away 
@@ -467,7 +505,7 @@ class gpka_spektral_dataset(spektral.data.Dataset):
     
     #determine the features of atoms separated n bonds away of each atom, and apply mask if required so the atoms in
     #alpha, beta, etc atoms are converted to eq. features
-    def features_n_bonds_away(self,suffixes=[""],ns=[],apply_mask=True,weighting=False,exclude_ending=""):
+    def features_n_bonds_away(self,suffixes=[""],ns=[],apply_mask=True,weighting="auto",exclude_ending=""):
         
         if type(ns)==int: ns=[n]
         if type(suffixes)==str: suffixes=[suffixes]
@@ -544,11 +582,12 @@ class gpka_spektral_dataset(spektral.data.Dataset):
 
     #find out the number of microeqs analyzing the bigest block in an edge matrix with
     def number_of_microeqs(self,matrix):
+
         #possible block sizes can only be exact divisors of the matrix dimensions
-        possible_block_sizes=[  int(matrix[0].shape[-1]/i)  for i in  range(matrix[0].shape[-1],0,-1)  if matrix[0].shape[-1]%i==0   ] 
+        possible_block_sizes=[  int(matrix[0].shape[-1]/i)  for i in  range(matrix[0].shape[-1],1,-1)  if matrix[0].shape[-1]%i==0   ] 
         for i,_ in enumerate(possible_block_sizes):
             j=possible_block_sizes[i]
-            if np.any(matrix[:j,j:])==False and np.any(matrix[:-j,-j:])==False: return possible_block_sizes[i-1]
+            if np.any(matrix[:j,j:])==False and np.any(matrix[:-j,-j:])==False: return matrix[0].shape[-1]/possible_block_sizes[i]
         return 1
 
     

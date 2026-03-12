@@ -61,7 +61,7 @@ scatter=go.Scatter(
                                y=pka_prediction,x=Y,mode='markers',text=text,showlegend=False,
                                 marker=dict(color=data["protonated charge"], colorscale='Rainbow',cmin=-5, cmax=3,
                                 line=dict(width=0.5),showscale=True, size=4,
-                                colorbar=dict( y=0.8, x=0.15, orientation="h", title={"text": "charge of AH species","side":"top"},
+                                colorbar=dict( y=0.8, x=0.15, orientation="h", title={"text": "charge of protonated species","side":"top"},
                                                 tickvals=list(range(-5,4)),
                                                 #ticktext=["{:.2f}".format(i) for i in range(-5,3)],
                                                 #tickness=18, 
@@ -84,6 +84,7 @@ fig1.update_layout(height=800)
 
 fig1.write_image("deltaGvspka.png", width=1000, height=800,scale=8)
 
+sys.exit()
 
 
 residuals_histogram=go.Histogram(x=(Y-pka_prediction),opacity=0.75,xbins={"size":0.25},showlegend=False,
@@ -793,7 +794,7 @@ sct=go.Scatter(
                                 x=data["pKa"],y=data["MW"],mode='markers',text=text,showlegend=False,
                                 marker=dict(color=data["protonated charge"], colorscale='Rainbow',cmin=-5, cmax=3,
                                 line=dict(width=1),showscale=True, size=4,
-                                colorbar=dict( y=0.8, x=0.9, orientation="h", title={"text": "charge of AH","side":"top"},title_font = dict(size=32),
+                                colorbar=dict( y=0.8, x=0.9, orientation="h", title={"text": "charge of protonated species","side":"top"},title_font = dict(size=32),
                                                 tickvals=list([-4,-2,0,1,2,3,4]),tickfont = dict(size=32),
                                                 #ticktext=["{:.2f}".format(i) for i in range(-5,3)],
                                                 #tickness=18, 

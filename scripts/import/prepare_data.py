@@ -198,9 +198,13 @@ def prepare_eq_data(file_name,drop_compounds,test_size=0.2,correlated_groups={},
 
 def prepare_graph_data_to_ML(json_file,csv_file_name,correlated_groups,
                             test_suffix="_std_test.csv",train_suffix="_std_train.csv",all_suffix="",
+                            output_file_suffix="_with_graph_data",
                             prepare_test_set=True,
                             standarize=True,use_standard_scalers=None,return_standard_scalers=False,
-                            save_standard_scalers_to_file="",std_transformer="StandardScaler"):
+                            save_standard_scalers_to_file="",std_transformer="StandardScaler",
+                            weighting=True,
+                            only_most_populated_microequilibrium=False,
+                            to_return=[]):
 
     train_data_file_name=csv_file_name[:-4]+train_suffix
     train_data_file_name=train_data_file_name.split("/")[-1]   #remove the route, since the files are in local directory
@@ -240,7 +244,7 @@ def prepare_graph_data_to_ML(json_file,csv_file_name,correlated_groups,
         
     if test_suffix!="" or prepare_test_set:
         test_dataset=gpka_spektral_dataset.gpka_spektral_dataset(json_file,csv_file=test_data_file_name,equilibrium_keys=categorical_features+eq_features,
-                                linear_equilibrium_keys=linear_eq_features,label_key="pKa")      
+                                linear_equilibrium_keys=linear_eq_features,label_key="pKa")     
     else: test_dataset=None
 
     if all_suffix!="":
@@ -248,16 +252,21 @@ def prepare_graph_data_to_ML(json_file,csv_file_name,correlated_groups,
                                 linear_equilibrium_keys=linear_eq_features,label_key="pKa")
     else: all_dataset=None
 
+    #print ("train dataset equilibrium_keys before applying mask:",train_dataset.equilibrium_keys)#borrame
+    #print (train_dataset.graphs[4].z)
     dataframes=[]
     for dataset in [train_dataset,test_dataset,all_dataset]: 
         if dataset!=None: 
-            if len(transformed_eq_features_replace)>0:     dataset.aply_mask_to_atom_features( transformed_eq_features_replace, replace=True )
-            if len(transformed_eq_features_no_replace)>0:  dataset.aply_mask_to_atom_features( transformed_eq_features_no_replace,replace=False)
-            dataset.features_n_bonds_away(suffixes=["alpha","beta","gamma"],exclude_ending="_H_difference")
+            if len(transformed_eq_features_replace)>0:     dataset.aply_mask_to_atom_features( transformed_eq_features_replace, replace=True,weighting=weighting) 
+            if len(transformed_eq_features_no_replace)>0:  dataset.aply_mask_to_atom_features( transformed_eq_features_no_replace,replace=False,weighting=weighting)
+            dataset.features_n_bonds_away(suffixes=["alpha","beta","gamma"],exclude_ending="_H_difference",weighting=weighting)
             dataframes.append(dataset.eq_features_to_pd_series())
         else: dataframes.append(None)
+    #print ("train dataset equilibrium_keys after applying mask:",train_dataset.equilibrium_keys)
+    #print (train_dataset.graphs[4].z)
 
     train_dataframe,test_dataframe,all_dataframe=dataframes[0],dataframes[1],dataframes[2]
+
 
     if standarize:
         not_standarize_features=linear_eq_features+["compn"]+["pKa"]+["correct name"]+categorical_features+["cluster_index"]
@@ -272,19 +281,36 @@ def prepare_graph_data_to_ML(json_file,csv_file_name,correlated_groups,
     train_data_new_file_name=train_data_file_name.split("/")[-1]#remove the route (so the new files are not created in the "extracted_data" directory
     test_data_new_file_name=test_data_file_name.split("/")[-1]#remove the route (so the new files are not created in the "extracted_data" directory
     all_data_new_file_name=all_data_file_name.split("/")[-1]#remove the route (so the new files are not created in the "extracted_data" directory
-    try:train_dataframe.to_csv(train_data_new_file_name[:-4]+"_with_graph_data.csv",index=False)
+    try:train_dataframe.to_csv(train_data_new_file_name[:-4]+output_file_suffix+".csv",index=False)
     except:pass
     #if test_dataframe!=None: test_dataframe.to_csv(test_data_new_file_name[:-4]+"_with_graph_data.csv",index=False)
-    try: test_dataframe.to_csv(test_data_new_file_name[:-4]+"_with_graph_data.csv",index=False)
+    try: test_dataframe.to_csv(test_data_new_file_name[:-4]+output_file_suffix+".csv",index=False)
     except: pass
-    try: all_dataframe.to_csv(all_data_new_file_name[:-4]+"_with_graph_data.csv",index=False)
+    try: all_dataframe.to_csv(all_data_new_file_name[:-4]+output_file_suffix+".csv",index=False)
     except: pass
 
-    if return_standard_scalers: return standard_scalers
+
+    if return_standard_scalers and len(to_return)==0: return standard_scalers
+
+    elif len(to_return)>0:
+        return_dict={} 
+        for dataset in [train_dataset,test_dataset,all_dataset]: 
+            if dataset!=None: 
+                for r in to_return: 
+                    if r=="names of equilibriums with several tautomers":
+                        return_dict[r]=[G.name for G in dataset.graphs if np.sum(G.mask)>1]
+                    if r=="standard_scalers": return_dict[r]= standard_scalers
+
+        return return_dict        
+
+    
 
 
 #prepare graph data, reading the json file, train_csv_file and tes_csv_file
-def prepare_graph_data(json_file,csv_file_name,correlated_groups,test_suffix="_std_test.csv",train_suffix="_std_train.csv",all_suffix="_std_all.csv", prepare_test_set=True):
+def prepare_graph_data(json_file,csv_file_name,correlated_groups,
+                        test_suffix="_std_test.csv",train_suffix="_std_train.csv",all_suffix="_std_all.csv", 
+                        prepare_test_set=True,only_most_populated_microequilibrium=False,
+                        to_return=[]):
 
     train_data_file_name=csv_file_name[:-4]+train_suffix
     train_data_file_name=train_data_file_name.split("/")[-1]  #remove the route (so the new files are not created in the "extracted_data" directory
@@ -326,8 +352,8 @@ def prepare_graph_data(json_file,csv_file_name,correlated_groups,test_suffix="_s
                 dataset.add_atom_feature(H_added_feature,k)
 
             #generate features corresponding to bonds with H and alpha atoms
-            if len(transformed_eq_features_replace)>0: dataset.aply_mask_to_atom_features( transformed_eq_features_replace, replace=True )
-            if len(transformed_eq_features_no_replace)>0: dataset.aply_mask_to_atom_features( transformed_eq_features_no_replace,replace=False)
+            if len(transformed_eq_features_replace)>0: dataset.aply_mask_to_atom_features( transformed_eq_features_replace, replace=True,only_most_populated_microequilibrium=only_most_populated_microequilibrium )
+            if len(transformed_eq_features_no_replace)>0: dataset.aply_mask_to_atom_features( transformed_eq_features_no_replace,replace=False,only_most_populated_microequilibrium=only_most_populated_microequilibrium)
             
             #add edge features: related to connectivity
             dataset.add_n_bonds_away_matrix(n=0,name="diagonal")
@@ -352,6 +378,17 @@ def prepare_graph_data(json_file,csv_file_name,correlated_groups,test_suffix="_s
             dataset.keep_features(all_kept_features)
             #save file
             joblib.dump(dataset,dataset_file_name)
+
+    if len(to_return)>0:
+        return_dict={} 
+        for dataset in [train_dataset,test_dataset,all_dataset]: 
+            if dataset!=None: 
+                for r in to_return: 
+                    if r=="names of equilibriums with several tautomers":return_dict[r]=[G.name for G in dataset.graphs if np.sum(G.mask)>1]
+                    if r=="standard_scalers": return_dict[r]= standard_scalers
+        return return_dict  
+
+
             
 import credits
 credits.print_credits()

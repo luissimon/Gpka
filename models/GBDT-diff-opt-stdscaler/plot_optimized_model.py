@@ -326,9 +326,9 @@ def score_model(composed_regressor_params,data,cv=10,file_name="composed_model")
                                     "line":{"width":0.5},"showscale":True,
                                     "colorbar":{"y":0.80,"x":0.15, "orientation":"h",
                                                 "title":{"text": "lin. model\nerror","side":"top",
-                                                        "font":{"size":22,"weight":500}},
+                                                        "font":{"size":32,"weight":500}},
                                                 "tickvals":[-3,-2,-1,0,1,2,3],
-                                                "tickfont":{"size":18},
+                                                "tickfont":{"size":24},
                                                 "thickness":18,"len":0.25,}},    
                             text=text )
 
@@ -351,9 +351,9 @@ def score_model(composed_regressor_params,data,cv=10,file_name="composed_model")
                                     "line":{"width":0.5},"showscale":True,
                                     "colorbar":{"y":0.56, "x":0.92,"orientation":"h", 
                                                 "title":{"text":"exp. pKa","side":"top",
-                                                        "font":{"size":22,"weight":500}},
+                                                        "font":{"size":32,"weight":500}},
                                                 "tickvals":[0,4,7,10,14],
-                                                "tickfont":{"size":18},
+                                                "tickfont":{"size":24},
                                                 "thickness":18,"len":0.15,}},  
                             text=text) 
 
@@ -390,16 +390,16 @@ def score_model(composed_regressor_params,data,cv=10,file_name="composed_model")
     #fig1.add_trace(residuals_histogram,row=2,col=2)
     fig1.update_layout(height=800,yaxis_range=[-5,16],xaxis_range=[-5,16])
 
-    fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(title_text="XGB corr.",title_standoff=4,row=1,col=2,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-    fig1.update_xaxes(title_text="linear model error.",title_standoff=4,row=1,col=2,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
+    fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(title_text="XGB corr.",title_standoff=4,row=1,col=2,title_font={'size': 22, 'weight': 1000},tickfont={"size":24})
+    fig1.update_xaxes(title_text="linear model error.",title_standoff=4,row=1,col=2,title_font={'size': 22, 'weight': 1000},tickfont={"size":24})
     #fig1['layout']['xaxis1'].update(title_text="pKa")
     #fig1['layout']['yaxis1'].update(title_text="pKa pred.")
-    fig1.update_xaxes(visible=False,row=3,col=2,range=[-4,5],title_font={'size': 24, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(visible=False,row=3,col=2,title_font={'size': 24, 'weight': 1000})
-    fig1.update_xaxes(visible=True,row=2,col=2,range=[-4,5],title_font={'size': 24, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(visible=False,row=2,col=2,title_font={'size': 24, 'weight': 1000})
+    fig1.update_xaxes(visible=False,row=3,col=2,range=[-4,5],title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(visible=False,row=3,col=2,title_font={'size': 34, 'weight': 1000})
+    fig1.update_xaxes(visible=True,row=2,col=2,range=[-4,5],title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(visible=False,row=2,col=2,title_font={'size': 34, 'weight': 1000})
     mean_absolute_error=np.mean(abs(train_pka_predictions-data["pKa"]))
     linear_mean_absolute_error=np.mean(abs(train_linear_pka_predictions-data["pKa"]))
     root_mean_squared_error=np.mean((train_pka_predictions-data["pKa"])**2)**0.5
@@ -480,8 +480,22 @@ if __name__=="__main__":
             "dimensionality_reduction":"None",
 
             #optimized parameters
-'lxalpha': 1.4927667722761333, 'lxl1_ratio': 0.7435036507881647, 'nl_bootstrap': False, 'nl_max_features': 0.7503990446667513, 'nl_booster': 'gbtree', 'nl_max_depth': 6, 'nl_subsample': 0.6559357845904604, 'nl_gamma': 0.011703594068894641, 
-'nl_reg_lambda': 0.7730862185886191, 'nl_reg_alpha': 0.36974300613319844, 'nl_tree_method': 'auto', 'nl_refresh_leaf': True, 'nl_max_bin': 135, 'nl_eta': 0.21274963957992102, 'nl_inner_n_estimators': 144, 'nl_n_estimators': 16,
+            'lxalpha': 1.4927667722761333, 
+            'lxl1_ratio': 0.7435036507881647, 
+            'nl_bootstrap': False, 
+            'nl_max_features': 0.7503990446667513, 
+            'nl_booster': 'gbtree', 
+            'nl_max_depth': 6, 
+            'nl_subsample': 0.6559357845904604, 
+            'nl_gamma': 0.011703594068894641, 
+            'nl_reg_lambda': 0.7730862185886191, 
+            'nl_reg_alpha': 0.36974300613319844, 
+            'nl_tree_method': 'auto', 
+            'nl_refresh_leaf': True, 
+            'nl_max_bin': 135, 
+            'nl_eta': 0.21274963957992102, 
+            'nl_inner_n_estimators': 144, 
+            'nl_n_estimators': 16,
 
             "non_linear_regressor":"BaggingRegressor-XGB",
             "l_ramdom_state": 42, "dr_random_state":42, "nl_random_state": 42,

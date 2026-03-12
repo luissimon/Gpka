@@ -385,8 +385,8 @@ def score_model(composed_regressor_params,train_data,test_data,file_name="compos
 
     fig1.update_layout(height=800,yaxis_range=[0,14],xaxis_range=[0,14])
 
-    fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
+    fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 36, 'weight': 1000},tickfont={"size":28})
+    fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 36, 'weight': 1000},tickfont={"size":28})
 
     mean_absolute_errors=[np.mean(abs(predicted_pka-experimental_pka))   for predicted_pka,experimental_pka in zip(predicted_pkas,experimental_pkas)]
     neg_mean_squared_errors=[np.mean((predicted_pka-experimental_pka)**2)**0.5 for predicted_pka,experimental_pka in zip(predicted_pkas,experimental_pkas)]
@@ -484,7 +484,22 @@ if __name__=="__main__":
             "dimensionality_reduction":"None",
 
 
-'lxalpha': 1.4927667722761333, 'lxl1_ratio': 0.7435036507881647, 'nl_bootstrap': False, 'nl_max_features': 0.7503990446667513, 'nl_booster': 'gbtree', 'nl_max_depth': 6, 'nl_subsample': 0.6559357845904604, 'nl_gamma': 0.011703594068894641, 'nl_reg_lambda': 0.7730862185886191, 'nl_reg_alpha': 0.36974300613319844, 'nl_tree_method': 'auto', 'nl_refresh_leaf': True, 'nl_max_bin': 135, 'nl_eta': 0.21274963957992102, 'nl_inner_n_estimators': 144, 'nl_n_estimators': 16, 
+            'lxalpha': 1.4927667722761333, 
+            'lxl1_ratio': 0.7435036507881647, 
+            'nl_bootstrap': False, 
+            'nl_max_features': 0.7503990446667513, 
+            'nl_booster': 'gbtree', 
+            'nl_max_depth': 6, 
+            'nl_subsample': 0.6559357845904604, 
+            'nl_gamma': 0.011703594068894641, 
+            'nl_reg_lambda': 0.7730862185886191, 
+            'nl_reg_alpha': 0.36974300613319844, 
+            'nl_tree_method': 'auto', 
+            'nl_refresh_leaf': True, 
+            'nl_max_bin': 135, 
+            'nl_eta': 0.21274963957992102, 
+            'nl_inner_n_estimators': 144, 
+            'nl_n_estimators': 16, 
 
 
             "non_linear_regressor":"BaggingRegressor-XGB",
