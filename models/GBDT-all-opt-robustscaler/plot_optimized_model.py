@@ -365,7 +365,7 @@ def score_model(composed_regressor_params,data,cv=10,file_name="composed_model")
                                                         "font":{"size":22,"weight":500}},
                                                 "tickvals":[-3,-2,-1,0,1,2,3],
                                                 "tickfont":{"size":18},
-                                                "thickness":18,"len":0.25,}},    
+                                                "thickness":24,"len":0.25,}},    
                             text=text )
 
     
@@ -390,7 +390,7 @@ def score_model(composed_regressor_params,data,cv=10,file_name="composed_model")
                                                         "font":{"size":22,"weight":500}},
                                                 "tickvals":[0,4,7,10,14],
                                                 "tickfont":{"size":18},
-                                                "thickness":18,"len":0.15,}},  
+                                                "thickness":24,"len":0.15,}},  
                             text=text) 
 
     final_residuals_histogram=go.Histogram(x=(data["pKa"]-train_pka_predictions),opacity=0.75,xbins={"size":0.25},marker_color="red",name="final model",legendgroup=1,legendrank=2)
@@ -426,16 +426,16 @@ def score_model(composed_regressor_params,data,cv=10,file_name="composed_model")
     #fig1.add_trace(residuals_histogram,row=2,col=2)
     fig1.update_layout(height=800,yaxis_range=[-5,16],xaxis_range=[-5,16])
 
-    fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(title_text="XGB corr.",title_standoff=4,row=1,col=2,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
-    fig1.update_xaxes(title_text="linear model error.",title_standoff=4,row=1,col=2,title_font={'size': 22, 'weight': 1000},tickfont={"size":16})
+    fig1.update_xaxes(title_text="pKa",row=1,col=1,title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(title_text="pKa pred.",row=1,col=1,title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(title_text="XGB corr.",title_standoff=4,row=1,col=2,title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
+    fig1.update_xaxes(title_text="linear model error.",title_standoff=4,row=1,col=2,title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
     #fig1['layout']['xaxis1'].update(title_text="pKa")
     #fig1['layout']['yaxis1'].update(title_text="pKa pred.")
-    fig1.update_xaxes(visible=False,row=3,col=2,range=[-4,5],title_font={'size': 24, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(visible=False,row=3,col=2,title_font={'size': 24, 'weight': 1000})
-    fig1.update_xaxes(visible=True,row=2,col=2,range=[-4,5],title_font={'size': 24, 'weight': 1000},tickfont={"size":16})
-    fig1.update_yaxes(visible=False,row=2,col=2,title_font={'size': 24, 'weight': 1000})
+    fig1.update_xaxes(visible=False,row=3,col=2,range=[-4,5],title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(visible=False,row=3,col=2,title_font={'size': 34, 'weight': 1000})
+    fig1.update_xaxes(visible=True,row=2,col=2,range=[-4,5],title_font={'size': 34, 'weight': 1000},tickfont={"size":24})
+    fig1.update_yaxes(visible=False,row=2,col=2,title_font={'size': 34, 'weight': 1000})
     mean_absolute_error=np.mean(abs(train_pka_predictions-data["pKa"]))
     linear_mean_absolute_error=np.mean(abs(train_linear_pka_predictions-data["pKa"]))
     root_mean_squared_error=np.mean((train_pka_predictions-data["pKa"])**2)**0.5
@@ -514,7 +514,21 @@ if __name__=="__main__":
             "dimensionality_reduction":"None",
 
             #optimized parameters
-            'lxalpha': 0.5374456653884402, 'lxl1_ratio': 1.6558968903730373, 'nl_bootstrap': False, 'nl_max_features': 0.4993436111070167, 'nl_booster': 'gbtree', 'nl_max_depth': 5, 'nl_subsample': 0.767075663062056, 'nl_gamma': 0.008007658160449356, 'nl_reg_lambda': 0.9346838774369579, 'nl_reg_alpha': 1.0378757234290215, 'nl_tree_method': 'hist', 'nl_refresh_leaf': False, 'nl_max_bin': 214, 'nl_eta': 0.2604774539725213, 'nl_inner_n_estimators': 198, 'nl_n_estimators': 12,
+            'lxalpha': 0.5374456653884402, 
+            'lxl1_ratio': 1.6558968903730373, 
+            'nl_bootstrap': False, 
+            'nl_max_features': 0.4993436111070167, 
+            'nl_booster': 'gbtree', 
+            'nl_max_depth': 5, 
+            'nl_subsample': 0.767075663062056, 
+            'nl_gamma': 0.008007658160449356, 
+            'nl_reg_lambda': 0.9346838774369579, 
+            'nl_reg_alpha': 1.0378757234290215, 
+            'nl_tree_method': 'hist', 
+            'nl_refresh_leaf': False, 
+            'nl_max_bin': 214, 'nl_eta': 0.2604774539725213, 
+            'nl_inner_n_estimators': 198, 
+            'nl_n_estimators': 12,
 
             "non_linear_regressor":"BaggingRegressor-XGB",
             "l_ramdom_state": 42, "dr_random_state":42, "nl_random_state": 42,

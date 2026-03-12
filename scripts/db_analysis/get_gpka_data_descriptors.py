@@ -34,9 +34,7 @@ mw,alogp,hba,hbd,psa=pd.Series(dtype="float"),pd.Series(dtype="float"),pd.Series
 n_rot_bonds=pd.Series(dtype="int")
 Murcko_Scaffold=pd.Series(dtype="int")
 functional_groups=pd.Series(dtype="str")
-Morgan_Fingerprint_2=pd.Series(dtype="str")
-Morgan_Fingerprint_3=pd.Series(dtype="str")
-Morgan_Fingerprint_4=pd.Series(dtype="str")
+
 
 
 
@@ -60,13 +58,6 @@ def process_entry(s):
         return [s.strip()]
 
 counter=0
-mfpgen2 = Chem.rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
-mfpgen3 = Chem.rdFingerprintGenerator.GetMorganGenerator(radius=3, fpSize=2048)
-mfpgen4 = Chem.rdFingerprintGenerator.GetMorganGenerator(radius=4, fpSize=2048)
-ref_mol=Chem.MolFromSmiles("c1ccc(Nc2c3ccccc3nc3ccccc23)cc1")
-refMF2=mfpgen2.GetCountFingerprint(ref_mol)
-refMF3=mfpgen3.GetCountFingerprint(ref_mol)
-refMF4=mfpgen4.GetCountFingerprint(ref_mol)
 for compn in labels.index:
     counter+=1
     n=compn.split("_")[0]
@@ -94,22 +85,13 @@ for compn in labels.index:
             Murcko_similes=Chem.MolToSmiles(MurckoScaffold.GetScaffoldForMol(mol),canonical=True)
             Murcko_Scaffold[n]=Murcko_similes
             functional_groups[n]=repr(funct_groups)
-            Morgan_Fingerprint_2[n]=mfpgen2.GetCountFingerprint(mol)
-            Morgan_Fingerprint_3[n]=mfpgen3.GetCountFingerprint(mol)
-            Morgan_Fingerprint_4[n]=mfpgen4.GetCountFingerprint(mol)
-            print (refMF2)
-            print(mfpgen2.GetCountFingerprint(mol))
-            #print(mfpgen2.GetFingerprint(mol).GetNumOnBits())
-            #print(DataStructs.cDataStructs.ConvertToNumpyArray(mfpgen2.GetFingerprint(mol),dtype=np.int8))
-            print(DataStructs.TanimotoSimilarity(refMF2,mfpgen2.GetCountFingerprint(mol)))
-            print(mfpgen3.GetFingerprint(mol))
-            print(mfpgen4.GetFingerprint(mol))
+
+
 
 
 
     if counter%100==0 or counter==len(labels.index): 
             Gpka_database_with_descriptors=pd.DataFrame()
-            print (len(inchi_key))
             
             Gpka_database_with_descriptors["name"] = name
             Gpka_database_with_descriptors.set_index("name",inplace=True)
