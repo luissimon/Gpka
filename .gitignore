@@ -16,12 +16,13 @@ scripts/old
 #ignore large files
 models/*/*with_graph_data.csv
 models/NN-simple-stdscaler/*.dataset
-models/NN-simple-stdscaler/*
-scripts/db_analysis/nohup.out
+models/NN-simple-stdscaler/values_extracted*.csv
+models/NN-simple-stdscaler/*.tar.xz
+models/NN-simple_stdscaler/pka_predictor_config.json
+models/NN-simple-stdscaler/slurm-scripts/*
+models/NN-simple-stdscaler/pka_predictor_config.json
 scripts/db_analysis/values_extracted-gibbs-*.csv
-scripts/db_analysis/tautomer_scatter.tar
-scripts/db_analysis/db_analysis.ipynb
-scripts/db_analysis/db_analysis_1.ipynb
+scripts/db_analysis/*with_graph_data.csv
 scripts/db_analysis/.ipynb_checkpoints
 scripts/db_analysis/nohup.out
 
